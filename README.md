@@ -19,3 +19,19 @@ https://github.com/biryeongtrain/RGBMapUtils
 ## ShaderFX
 
 [![showcase_3](https://www.youtube.com/watch?v=3GpW_6qgs80)](https://www.youtube.com/watch?v=3GpW_6qgs80)
+
+## How to use
+
+```groovy
+repositories {
+    maven ( url "https://repo.biryeong.kim/releases/")
+}
+
+dependencies {
+    implementation include 'kim.biryeong:danta-shader:1.0.0'
+}
+ 
+```
+
+ShaderFX : just use command `/shaderfx run`
+RGBMapUtils, DisplayHud : 테스트 커멘드 확인해서 예시 참조
