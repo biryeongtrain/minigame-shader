@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "dantashader",
+  "version": "${version}",
+  "name": "Danta Shaders",
+  "description": "Useful stuffs for Danta",
+  "authors": [],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/dorondo-hud/icon.png",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "kim.biryeong.dantashader.DantaShaderInitializer"
+    ]
+  },
+  "mixins": [
+    "dorondo-hud.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}

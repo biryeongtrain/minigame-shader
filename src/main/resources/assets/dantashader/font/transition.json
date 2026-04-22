@@ -1,0 +1,137 @@
+{
+  "providers": [
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-hbars.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["A"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-mechadoor.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["B"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-motion-pixel.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["C"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-noise.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["D"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-pixel.png",
+      "ascent": 0,
+      "height": 12,
+      "chars": ["E"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-pixel-swirl.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["F"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-slashes.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["G"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-stripes.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["H"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-swirl.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["I"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-vbars.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["J"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-grid.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["K"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-chess-then-circles.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["L"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-circles-then-chess-then-circles.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["M"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-crashing-wave.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["N"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-enclosing-triangles.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["O"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-gooey.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["P"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-poke-arena.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["Q"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-spinning-spiral.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["R"]
+    },
+    {
+      "type": "bitmap",
+      "file": "dantashader:font/transition-trapped.png",
+      "ascent": 0,
+      "height": 256,
+      "chars": ["S"]
+    }
+  ]
+}
