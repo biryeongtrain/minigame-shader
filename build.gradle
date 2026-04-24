@@ -84,6 +84,7 @@ dependencies {
 //    modImplementation include("eu.pb4:sidebar-api:${project.sidebar_api_version}")
 //    modImplementation include("de.tomalbrc:avatar-renderer:${project.avatar_renderer_version}")
     modImplementation include("eu.pb4:map-canvas-api:${project.map_canvas_api_version}")
+
 }
 
 processResources {

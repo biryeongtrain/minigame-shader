@@ -7,7 +7,7 @@
   "authors": [],
   "contact": {},
   "license": "MIT",
-  "icon": "assets/dorondo-hud/icon.png",
+  "icon": "assets/dantashader/icon.png",
   "environment": "server",
   "entrypoints": {
     "main": [
@@ -15,7 +15,7 @@
     ]
   },
   "mixins": [
-    "dorondo-hud.mixins.json"
+    "danta-shader.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=${loader_version}",

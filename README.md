@@ -28,7 +28,7 @@ repositories {
 }
 
 dependencies {
-    implementation include 'kim.biryeong:danta-shader:1.0.0'
+    implementation include 'kim.biryeong:danta-shader:1.0.2+1.21.8'
 }
  
 ```
