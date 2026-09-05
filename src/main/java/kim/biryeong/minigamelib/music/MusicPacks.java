@@ -1,0 +1,81 @@
+package kim.biryeong.minigamelib.music;
+
+import eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils;
+import kim.biryeong.minigamelib.MinigameLib;
+import kim.biryeong.minigamelib.cinematic.CameraViews;
+import net.minecraft.network.protocol.common.*;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerCommonPacketListenerImpl;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import java.nio.file.*;
+import java.security.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+public final class MusicPacks {
+    public record Published(MusicCatalog catalog, String hash) {}
+    private static final ThreadLocal<MusicCatalog> BUILD = new ThreadLocal<>();
+    private static final Map<UUID, PackReadiness> LISTENERS = new ConcurrentHashMap<>();
+    private static volatile Published published = new Published(MusicCatalog.empty(), "");
+    private MusicPacks() {}
+    public static void init(Path directory) {
+        PolymerResourcePackUtils.RESOURCE_PACK_CREATION_EVENT.register(builder -> {
+            try {
+                var scan = MusicCatalog.scan(directory, s -> org.slf4j.LoggerFactory.getLogger("minigamelib").warn("Music: {}", s));
+                for (var asset : scan.assets().entrySet())
+                    if (!builder.addData(asset.getKey(), asset.getValue())) throw new IllegalStateException("Cannot add " + asset.getKey());
+                BUILD.set(scan.catalog());
+            } catch (java.io.IOException e) { throw new IllegalStateException("Cannot scan music directory", e); }
+        });
+    }
+    public static Published published() { return published; }
+    public static void begin() { BUILD.remove(); }
+    public static void finish(Path output, boolean success) {
+        var candidate = BUILD.get(); BUILD.remove();
+        if (!success || candidate == null) return;
+        try (var stream = Files.newInputStream(output)) {
+            var digest = MessageDigest.getInstance("SHA-1");
+            byte[] buffer = new byte[65536]; int size;
+            while ((size = stream.read(buffer)) >= 0) digest.update(buffer, 0, size);
+            published = new Published(candidate, HexFormat.of().formatHex(digest.digest()));
+        } catch (Exception e) { org.slf4j.LoggerFactory.getLogger("minigamelib").error("Cannot verify generated music pack", e); }
+    }
+    public static ClientboundResourcePackPushPacket sent(ServerCommonPacketListenerImpl handler, ClientboundResourcePackPushPacket packet) {
+        if (!packet.id().equals(PolymerResourcePackUtils.getMainUuid())) return packet;
+        var previous = LISTENERS.get(handler.getOwner().getId());
+        if (previous != null) handler.send(new ClientboundResourcePackPopPacket(Optional.of(previous.id())));
+        // Polymer reuses one UUID. A fresh wire UUID prevents an old load ACK from approving a newer build.
+        var sent = new ClientboundResourcePackPushPacket(UUID.randomUUID(),packet.url(),packet.hash(),packet.required(),packet.prompt());
+        LISTENERS.put(handler.getOwner().getId(), new PackReadiness(sent.id(), sent.hash(), false));
+        if (handler instanceof ServerGamePacketListenerImpl game) interrupt(game.player);
+        return sent;
+    }
+    public static ServerboundResourcePackPacket response(ServerCommonPacketListenerImpl handler, ServerboundResourcePackPacket packet) {
+        var state = LISTENERS.get(handler.getOwner().getId());
+        if (state == null || !state.id().equals(packet.id())) return packet;
+        LISTENERS.replace(handler.getOwner().getId(),state,state.acknowledged(packet.id(),packet.action() == ServerboundResourcePackPacket.Action.SUCCESSFULLY_LOADED));
+        // Keep Polymer's native pack tracking under its public main UUID.
+        return new ServerboundResourcePackPacket(PolymerResourcePackUtils.getMainUuid(),packet.action());
+    }
+    public static ClientboundResourcePackPopPacket mapPop(ServerCommonPacketListenerImpl handler, ClientboundResourcePackPopPacket packet) {
+        var state = LISTENERS.get(handler.getOwner().getId());
+        return state != null && packet.id().filter(PolymerResourcePackUtils.getMainUuid()::equals).isPresent()
+                ? new ClientboundResourcePackPopPacket(Optional.of(state.id())) : packet;
+    }
+    public static boolean ready(ServerPlayer player) {
+        var state = LISTENERS.get(player.getUUID());
+        return state != null && state.ready(published.hash);
+    }
+    private static void interrupt(ServerPlayer player) {
+        player.getServer().execute(() -> { CameraViews.stop(player); MinigameLib.get(player.getServer()).music().interrupted(player); });
+    }
+    public static void forget(ServerPlayer player) { forget(player.getUUID()); }
+    public static void forget(UUID player) { LISTENERS.remove(player); }
+    public static void popped(ServerCommonPacketListenerImpl handler, Optional<UUID> id) {
+        var state = LISTENERS.get(handler.getOwner().getId());
+        if (state != null && (id.isEmpty() || state.id().equals(id.get()))) {
+            LISTENERS.remove(handler.getOwner().getId());
+            if (handler instanceof ServerGamePacketListenerImpl game) interrupt(game.player);
+        }
+    }
+}

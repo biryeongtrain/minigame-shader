@@ -32,6 +32,7 @@ void main() {
     texCoord0 = UV0;
     texCoord1 = UV1;
     texCoord2 = UV2;
+
     //Hud
     if (make_hud()) {
         vertexColor = Color;

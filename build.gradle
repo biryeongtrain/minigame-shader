@@ -55,6 +55,14 @@ repositories {
 }
 
 dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.3'
+    if (project.hasProperty('minigameSmoke')) {
+        def harness = file(project.findProperty('smokeHarness') ?: '/Users/qf/IdeaProjects/copper-golem-fabric-1.21.8/coppergolem-fabric-server/build/libs/coppergolem-fabric-server-1.21.8-1.0.0-SNAPSHOT.jar')
+        modRuntimeOnly files(harness)
+        runtimeOnly files(zipTree(harness).matching { include 'META-INF/jars/*.jar' })
+        modRuntimeOnly 'maven.modrinth:carpet:1.4.177'
+    }
     // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings loom.officialMojangMappings()
@@ -86,6 +94,27 @@ dependencies {
     modImplementation include("eu.pb4:map-canvas-api:${project.map_canvas_api_version}")
 
 }
+
+loom {
+    runs {
+        smokeServer {
+            inherit server
+            name 'Minigame Lib smoke server'
+            runDir 'build/minigamelib-smoke'
+        }
+    }
+}
+
+test { useJUnitPlatform() }
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = 'minigamelib-test'
+        enableGameTests = true
+        eula = true
+    }
+}
+loom.runs.smokeServer.source(sourceSets.gametest)
 
 processResources {
     inputs.property "version", project.version
@@ -127,6 +156,7 @@ jar {
     from("LICENSE") {
         rename { "${it}_${project.archives_base_name}" }
     }
+    from("THIRD_PARTY_NOTICES.md")
 }
 
 // configure the maven publication

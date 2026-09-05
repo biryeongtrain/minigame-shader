@@ -1,25 +1,30 @@
 {
   "schemaVersion": 1,
-  "id": "dantashader",
+  "id": "minigamelib",
   "version": "${version}",
-  "name": "Danta Shaders",
-  "description": "Useful stuffs for Danta",
+  "name": "Minigame Lib",
+  "description": "Server-side cinematics, music and visual utilities for minigames",
   "authors": [],
   "contact": {},
   "license": "MIT",
-  "icon": "assets/dantashader/icon.png",
+  "icon": "assets/minigamelib/icon.png",
   "environment": "server",
   "entrypoints": {
     "main": [
-      "kim.biryeong.dantashader.DantaShaderInitializer"
+      "kim.biryeong.minigamelib.MinigameLibInitializer"
     ]
   },
   "mixins": [
-    "danta-shader.mixins.json"
+    "minigamelib.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=${loader_version}",
     "fabric-api": "*",
-    "minecraft": "${minecraft_version}"
+    "minecraft": "${minecraft_version}",
+    "java": ">=21",
+    "polymer-core": ">=0.13.13",
+    "polymer-resource-pack": ">=0.13.13",
+    "polymer-resource-pack-extras": ">=0.13.13",
+    "polymer-virtual-entity": ">=0.13.13"
   }
 }

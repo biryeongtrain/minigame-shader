@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "minigamelib-test",
+  "version": "1.0.0",
+  "name": "Minigame Lib GameTests",
+  "environment": "server",
+  "entrypoints": {"main": ["kim.biryeong.minigamelib.QAControls"], "fabric-gametest": ["kim.biryeong.minigamelib.LibraryGameTests"]},
+  "depends": {"minigamelib": "*", "fabric-gametest-api-v1": "*"}
+}
