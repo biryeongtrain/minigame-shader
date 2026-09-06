@@ -127,10 +127,19 @@ public final class LibraryGameTests {
             var output=packets(p);
             check(h,output.stream().anyMatch(x->x instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket),"Editor sent no panel entities");
             check(h,packets(other).stream().noneMatch(x->x instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket),"Personal panel leaked to another admin");
-            int hit=output.stream().filter(x->x instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket add&&add.getType()==net.minecraft.world.entity.EntityType.INTERACTION)
-                    .map(x->((net.minecraft.network.protocol.game.ClientboundAddEntityPacket)x).getId()).findFirst().orElseThrow();
-            var target=new net.minecraft.world.entity.Interaction(net.minecraft.world.entity.EntityType.INTERACTION,p.level());target.setId(hit);
-            p.connection.handleInteract(net.minecraft.network.protocol.game.ServerboundInteractPacket.createInteractionPacket(target,false,net.minecraft.world.InteractionHand.MAIN_HAND));
+            var panel=(eu.pb4.polymer.virtualentity.api.ElementHolder)QAControls.field(QAControls.session(p),"panel");
+            var hit=(eu.pb4.polymer.virtualentity.api.elements.InteractionElement)null;String label="";
+            for(var element:panel.getElements()) {
+                if(element instanceof eu.pb4.polymer.virtualentity.api.elements.TextDisplayElement text)label=text.getText().getString();
+                if(element instanceof eu.pb4.polymer.virtualentity.api.elements.InteractionElement button&&label.equals("+ NEW")){hit=button;break;}
+            }
+            check(h,hit!=null,"Camera browser has no create button");
+            var target=new net.minecraft.world.entity.Interaction(net.minecraft.world.entity.EntityType.INTERACTION,p.level());target.setId(hit.getEntityId());
+            var click=net.minecraft.network.protocol.game.ServerboundInteractPacket.createInteractionPacket(target,false,net.minecraft.world.InteractionHand.MAIN_HAND);
+            p.connection.handleInteract(click);
+            check(h,QAControls.field(QAControls.session(p),"dialogId")==null,"Off-target click bypassed the panel aim check");
+            p.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,hit.getCurrentPos().add(0,hit.getHeight()/2,0));
+            p.connection.handleInteract(click);
             var session=QAControls.session(p);var action=(net.minecraft.resources.ResourceLocation)QAControls.field(session,"dialogId");
             check(h,action!=null,"Native panel click did not open a dialog");
             var payload=new net.minecraft.nbt.CompoundTag();payload.putString("name","테스트 카메라");payload.putString("dimension",h.getLevel().dimension().location().toString());

@@ -42,7 +42,11 @@ public final class QAControls implements ModInitializer {
                     }
                 })))
                 .then(literal("click").then(argument("entity",integer()).executes(c->run(c.getSource().getPlayerOrException(),p->{
-                    var entity=new Interaction(EntityType.INTERACTION,p.level());entity.setId(getInteger(c,"entity"));
+                    var panel=(ElementHolder)field(session(p),"panel");
+                    var hit=panel.getElements().stream().filter(e->e instanceof InteractionElement h&&h.getEntityId()==getInteger(c,"entity"))
+                            .map(e->(InteractionElement)e).findFirst().orElseThrow();
+                    p.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,hit.getCurrentPos().add(0,hit.getHeight()/2,0));
+                    var entity=new Interaction(EntityType.INTERACTION,p.level());entity.setId(hit.getEntityId());
                     p.connection.handleInteract(ServerboundInteractPacket.createInteractionPacket(entity,false,InteractionHand.MAIN_HAND));
                 }))))
                 .then(literal("dialog").then(argument("payload",greedyString()).executes(c->run(c.getSource().getPlayerOrException(),p->{

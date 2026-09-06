@@ -11,7 +11,7 @@
 - 팩 빌드 실패 검사는 비어 있지 않은 디렉터리를 ZIP 출력 대상으로 지정합니다. 해당 검사에서 출력되는 `DirectoryNotEmptyException`은 의도한 실패입니다.
 - 게임 테스트는 Minecraft 패킷 처리기와 EmbeddedChannel을 사용합니다. 렌더링 이후의 표시·음원 출력까지 증명하지 않습니다.
 
-전체 빌드 로그: [full-gate.log](../build/full-gate.log). JUnit 보고서: [HTML](../build/reports/tests/test/index.html).
+전체 빌드 로그: [ui-full-gate.log](../build/ui-full-gate.log). JUnit 보고서: [HTML](../build/reports/tests/test/index.html).
 
 ## 실제 클라이언트
 
@@ -30,6 +30,19 @@ Copper Golem Fabric 서버와 1.21.8 vision client를 사용했습니다. vision
 
 서버 상태: [재생 중·종료 후 몸 상태](../build/verification/tour-final/checks.json), [클라이언트 차원 기록](../build/verification/tour-final/states.json).
 
+## 레퍼런스 UI 반영
+
+`lol.mp4`의 세로 메뉴, 검은 월드 패널, 회색 목록 행, 색상 버튼과 트랙 막대를 반영했습니다. 패널과 글자는 같은 평면에 고정하며, 각 항목의 PLAY / SHOW / DELETE와 조준 시 강조를 제공합니다. 목록과 씬 트랙의 페이지는 별도로 넘깁니다. 시간 눈금으로 커서를 옮기고 VIEW로 정지 시점을 확인하거나 PLAY로 재생합니다.
+
+- 새 패널에서 Camera 생성 → 이름 입력 → SAVE → 편집기 종료·재진입 → 저장된 속성 확인을 수행했습니다. Camera / Entity / Scenes 전환, SHOW / HIDE, 목록·트랙의 다음 페이지, ◆ 클릭으로 60틱 키프레임 Dialog 열기도 확인했습니다.
+- 10개 트랙이 있는 로컬 QA 씬에서 커서 이동과 VIEW를 수행했습니다. 준비 완료 시 `view=minecraft:overworld ready=true tickets=1`, 종료 후 `view=none tickets=0`을 확인했습니다. 입력은 QA 명령이 플레이어 시선을 버튼으로 맞춘 뒤 native 패킷 처리기를 호출했습니다. 물리 마우스 클릭 자동화와는 구분합니다.
+- Java 21의 JUnit 8개·GameTest 7개·remapJar를 다시 통과했습니다. GameTest는 조준하지 않은 버튼 ID만 보낸 요청의 거절도 검사합니다.
+- Minecraft 1.21.8, 오버월드, 적용된 Polymer 팩, 1인칭, HUD 숨김 상태의 framebuffer를 촬영했습니다. 목록은 `(0.5, -60, 0.5)` yaw/pitch `0/0`, 타임라인은 `(-3.5, -60, 0.5)` `16/3`, 전체 배치는 `(-1.25, -60, -0.5)` `0/3`입니다. 위의 이전 UI 이미지와는 촬영 위치가 다릅니다.
+
+[전체 배치](../build/verification/ui-overview-final.png) · [Camera 목록](../build/verification/ui-camera-final.png) · [Entity 목록](../build/verification/ui-entity-final.png) · [씬 타임라인](../build/verification/ui-timeline-final.png) · [키프레임 입력](../build/verification/ui-keyframe-dialog-final.png)
+
+[약 21초 화면 기록](../build/verification/ui-reference-redesign.mp4) · [28단계 조작·저장·복귀 기록](../build/verification/ui-flow.json) · [저장 후 다시 연 속성](../build/verification/ui-saved-dialog-final.png)
+
 ## 음악과 팩
 
 - 한글·공백 OGG 두 곡을 사용했습니다. 추가·수정·삭제 후 실제 Polymer 팩 생성에서 곡 수 `2 → 3 → 3 → 2`, 수정된 음원의 바이트 해시 변경, 삭제 후 원래 팩 해시 복구를 확인했습니다.
@@ -43,4 +56,4 @@ Copper Golem Fabric 서버와 1.21.8 vision client를 사용했습니다. vision
 
 [배포 JAR](../build/libs/minigame-lib-1.0.2+1.21.8.jar). 테스트 모드·QA 명령은 포함하지 않습니다. Maven 게시·운영 서버 배포는 수행하지 않았습니다. 설치·API·마이그레이션은 [README](../README.md)를 참고하세요.
 
-JAR SHA-256: `f5a2f0c860e3d55f9b94ff69ee0aa3e90233f1fe6c9796d60e15a71cb7b33569`.
+JAR SHA-256: `da5af560dbf8f2f222f7c359e239400100d0a08303c55a6af4dbfdb3c62ffc39`.
