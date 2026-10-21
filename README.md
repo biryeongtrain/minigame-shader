@@ -1,10 +1,32 @@
 # Minigame Lib
 
-Fabric 1.21.8·Java 21 서버 라이브러리입니다. 시네마틱, 공간 편집기, OGG 음악과 기존 DisplayHUD·RGBMapUtils·ShaderFX·FOV를 제공합니다. 플레이어에게는 전용 클라이언트 모드 없이 Polymer 리소스팩을 전송합니다.
+Fabric **Minecraft 26.3**·Java 25 서버 라이브러리입니다. 시네마틱, 공간 편집기, OGG 음악과 기존 DisplayHUD·RGBMapUtils·ShaderFX·FOV를 제공합니다. 플레이어에게는 전용 클라이언트 모드 없이 Polymer 리소스팩을 전송합니다.
 
 ## DisplayHud
 
-출처 : https://github.com/dorondo0000/DisplayHUD
+출처 : https://github.com/dorondo0000/DisplayHUD (2.2 Beta 기준으로 포팅)
+
+2.0.0(26.3)부터 DisplayHUD 2.x 구조를 따릅니다.
+
+- HUD 엔티티는 월드에 추가되지 않는 가상 `Display`이며, 패킷으로만 소유자에게 보이고 플레이어 탑승(passenger) 패킷에 자동으로 합쳐집니다.
+- `GlobalHud.text/item/block(id)`로 여러 플레이어가 공유하는 HUD를 만들고 `show/hide/remove`로 관리합니다.
+- `setAboveHand(true)`: 손에 든 아이템 위에 그립니다(`minigamelib:above_hand_trigger` 아이템 모델 사용).
+- `updateWhenDataChanged()`: 값이 바뀔 때마다 자동으로 메타데이터를 전송합니다. `removeWhenPlayerDied()`, `setGlowing()`, `TextDisplayHud.setOpacity(n, time)`/`setBackgroundColor()`를 지원합니다.
+- 리스폰·차원 이동 시 HUD를 자동으로 다시 보냅니다.
+
+```java
+var hp = new TextDisplayHud();
+hp.setText(Component.literal("HP 100"));
+hp.setAlignment(DisplayHud.HudAlignment.LEFT);
+hp.setLocation(-900, -480, 0); // 1920x1080 기준 화면 좌표
+hp.spawn(player, "hp");
+
+var banner = GlobalHud.text("round");
+banner.getHud().setText(Component.literal("ROUND 1"));
+banner.show(server.getPlayerList().getPlayers());
+```
+
+**주의(1.x와 호환되지 않는 기본값)**: `DisplayHudManager` 기본값이 `unit 100/100`, `1920x1080`, `alignmentGap 1_000_000`으로 바뀌었습니다(셰이더 `displayhud.glsl`과 일치). 1.x의 `unit 1`, `gap 10000` 기준 좌표를 쓰던 코드는 좌표를 다시 맞추거나 `DisplayHudManager.configure(...)`로 셰이더 값과 함께 바꿔야 합니다.
 
 ![2026-01-12+05-23-25](https://github.com/user-attachments/assets/3545fff5-8a65-4b7d-9079-33f1885856c5)
 
@@ -23,7 +45,7 @@ https://github.com/biryeongtrain/RGBMapUtils
 
 ## 설치와 이전
 
-Fabric API와 Minecraft 1.21.8용 Polymer 0.13.13을 서버에 설치하고 `minigame-lib-1.0.2+1.21.8.jar`를 추가합니다. Maven 좌표는 `kim.biryeong:minigame-lib:1.0.2+1.21.8`입니다. 이 작업에서는 Maven 저장소에 게시하지 않습니다.
+Fabric Loader 0.20.1+, Fabric API 0.164.0+26.3, Polymer 0.18.4+26.3을 서버에 설치하고 `minigame-lib-2.0.0+26.3.jar`를 추가합니다. Maven 좌표는 `kim.biryeong:minigame-lib:2.0.0+26.3`입니다. 클라이언트는 바닐라 26.3(OpenGL/Vulkan)이며 Polymer 리소스팩만 받으면 됩니다. 이 작업에서는 Maven 저장소에 게시하지 않습니다.
 
 기존 Java import의 `kim.biryeong.dantashader`를 `kim.biryeong.minigamelib`로, 리소스 ID의 `dantashader:`를 `minigamelib:`로 변경하세요. 모드 ID는 `minigamelib`입니다. 기존 `shaderfx.json`은 새 `config/minigame-lib/shaderfx.json`이 없을 때 가져옵니다. 원본은 남겨 둡니다.
 
@@ -431,17 +453,21 @@ CameraEffects.resetFov(player);
 
 관리자 명령은 `/minigamelib fov set <player> <degrees>`, `/minigamelib fov reset <player>`입니다. ShaderFX는 `/shaderfx run`을 유지합니다. 개발 환경에서는 `/displayhudtest`와 `/rgbmapdebug`를 사용할 수 있습니다.
 
-Dynamic FOV는 음수 GameTime 태그로 전달하고 현재 클라이언트가 관전하는 차원의 시간을 함께 동기화합니다. FOV를 초기화하면 정상 월드 시간을 전송합니다. FOV가 활성화된 동안 GameTime 기반 셰이더 애니메이션의 위상에 영향을 줄 수 있습니다. JNNGL의 Dynamic FOV 구현을 바탕으로 했으며 저작권 고지는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 포함합니다.
+Dynamic FOV는 음수 GameTime 태그로 전달하고 현재 클라이언트가 관전하는 차원의 시간을 함께 동기화합니다. FOV를 초기화하면 정상 월드 시간을 전송합니다. FOV가 활성화된 동안 GameTime 기반 셰이더 애니메이션의 위상에 영향을 줄 수 있습니다.
+
+26.3에서는 Dynamic FOV 셰이더(`include/projection.glsl` 덮어쓰기)가 **기본으로 꺼져 있습니다**. 바닐라 projection include를 교체하므로 다른 팩과 충돌할 수 있기 때문입니다. 사용하려면 `config/minigame-lib/shaderfx.json`에 `"dynamicFovShader": true`를 넣고 팩을 다시 생성하세요. 꺼진 상태에서 `CameraEffects.setFov`를 호출하면 경고를 한 번 기록합니다. JNNGL의 Dynamic FOV 구현을 바탕으로 했으며 저작권 고지는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 포함합니다.
 
 ## 빌드와 검증
 
-Java 21에서 실행합니다.
+Java 25에서 실행합니다(26.3은 난독화가 해제되어 매핑 없이 Mojang 이름을 그대로 씁니다).
 
 ```sh
-rtk sh ./gradlew test runGameTest remapJar --console=plain --no-daemon
+rtk sh ./gradlew test runGameTest build --console=plain --no-daemon
+# 실제 클라이언트로 DisplayHud/ShaderFX 스크린샷 확인 (화면이 켜져 있어야 함)
+rtk sh ./gradlew runClientGameTest   # build/run/clientGameTest/screenshots
 ```
 
-JUnit은 파싱·보간·파일 충돌·음악 길이·재생 순서·팩 적용 상태를 검사합니다. Fabric GameTest는 몸과 입력 보호, 교체·복구, 패널 격리·Dialog 응답, 팩 빌드 실패, 음악 합류·우선순위를 검사합니다. 1.21.8 Fabric의 SNBT 구조물을 `src/gametest/resources/data/minigamelib-test/gametest/structure`에 둡니다. 기존 testing 스킬의 레이아웃 검사기는 이 별도 소스셋과 SNBT 경로를 인식하지 못합니다.
+JUnit은 파싱·보간·파일 충돌·음악 길이·재생 순서·팩 적용 상태를 검사합니다. Fabric GameTest는 몸과 입력 보호, 교체·복구, 패널 격리·Dialog 응답, 팩 빌드 실패, 음악 합류·우선순위를 검사합니다. Fabric GameTest의 SNBT 구조물을 `src/gametest/resources/data/minigamelib-test/gametest/structure`에 둡니다. 기존 testing 스킬의 레이아웃 검사기는 이 별도 소스셋과 SNBT 경로를 인식하지 못합니다.
 
 로컬 Copper Golem 서버 JAR 경로를 지정하면 테스트 서버와 QA 전용 명령을 사용할 수 있습니다. 테스트 모드는 배포 JAR에 포함되지 않습니다.
 
