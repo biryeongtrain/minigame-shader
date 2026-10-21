@@ -4,6 +4,19 @@
   "version": "1.0.0",
   "name": "Minigame Lib GameTests",
   "environment": "*",
-  "entrypoints": {"main": ["kim.biryeong.minigamelib.QAControls"], "fabric-gametest": ["kim.biryeong.minigamelib.LibraryGameTests"]},
-  "depends": {"minigamelib": "*", "fabric-gametest-api-v1": "*"}
+  "entrypoints": {
+    "main": [
+      "kim.biryeong.minigamelib.QAControls"
+    ],
+    "fabric-gametest": [
+      "kim.biryeong.minigamelib.LibraryGameTests"
+    ],
+    "fabric-client-gametest": [
+      "kim.biryeong.minigamelib.ClientVisualTests"
+    ]
+  },
+  "depends": {
+    "minigamelib": "*",
+    "fabric-gametest-api-v1": "*"
+  }
 }

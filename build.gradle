@@ -95,6 +95,7 @@ fabricApi {
         createSourceSet = true
         modId = 'minigamelib-test'
         enableGameTests = true
+        enableClientGameTests = true
         eula = true
     }
 }
