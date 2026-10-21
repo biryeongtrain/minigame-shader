@@ -11,8 +11,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ServerChunkCache.class)
 public abstract class ViewEntityEventsMixin {
-    @Inject(method = {"broadcast", "broadcastAndSend"}, at = @At("HEAD"))
+    @Inject(method = {"sendToTrackingPlayers", "sendToTrackingPlayersAndSelf"}, at = @At("HEAD"))
     private void minigamelib$entityEvent(Entity entity, Packet<?> packet, CallbackInfo ci) {
+        forward(entity, packet);
+    }
+
+    @Inject(method = "sendToTrackingPlayersFiltered", at = @At("HEAD"))
+    private void minigamelib$entityEventFiltered(Entity entity, Packet<?> packet, java.util.function.Predicate<?> filter, CallbackInfo ci) {
+        forward(entity, packet);
+    }
+
+    private static void forward(Entity entity, Packet<?> packet) {
         for (var view : CameraViews.all())
             if (view.level() == entity.level() && view.tracks(entity.chunkPosition())) view.send(packet);
     }
