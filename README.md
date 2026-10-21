@@ -469,13 +469,6 @@ rtk sh ./gradlew runClientGameTest   # build/run/clientGameTest/screenshots
 
 JUnit은 파싱·보간·파일 충돌·음악 길이·재생 순서·팩 적용 상태를 검사합니다. Fabric GameTest는 몸과 입력 보호, 교체·복구, 패널 격리·Dialog 응답, 팩 빌드 실패, 음악 합류·우선순위를 검사합니다. Fabric GameTest의 SNBT 구조물을 `src/gametest/resources/data/minigamelib-test/gametest/structure`에 둡니다. 기존 testing 스킬의 레이아웃 검사기는 이 별도 소스셋과 SNBT 경로를 인식하지 못합니다.
 
-로컬 Copper Golem 서버 JAR 경로를 지정하면 테스트 서버와 QA 전용 명령을 사용할 수 있습니다. 테스트 모드는 배포 JAR에 포함되지 않습니다.
-
-```sh
-rtk sh ./gradlew runSmokeServer -PminigameSmoke \
-  -PsmokeHarness=/absolute/path/coppergolem-fabric-server-1.21.8-1.0.0-SNAPSHOT.jar
-```
-
-런타임 디렉터리는 `build/minigamelib-smoke`입니다. `scripts/copper_mcp.py`는 서버의 로컬 SSE 도구를 호출합니다. 화면은 Copper Golem 1.21.8 vision client의 실제 framebuffer로 확인합니다. 자동 테스트 성공과 실제 화면·소리 검증 결과는 구분해서 기록합니다.
+1.x에 있던 Copper Golem 스모크 하네스(`runSmokeServer`)는 26.3 하네스가 없어 제거했습니다. 대신 `runClientGameTest`로 실제 클라이언트 화면을 확인합니다.
 
 실행 결과와 실제 화면·영상, 생략한 검증은 [검증 기록](docs/verification.md)에 정리했습니다.
