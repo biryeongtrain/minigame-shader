@@ -16,7 +16,8 @@
     "ViewBroadcastMixin",
     "ViewEntityEventsMixin",
     "MusicBuildMixin",
-    "ChunkSenderAccessor"
+    "ChunkSenderAccessor",
+    "HudPassengerMixin"
   ],
   "client": [
   ],

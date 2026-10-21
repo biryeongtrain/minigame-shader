@@ -75,10 +75,10 @@ public class RPHandler {
                 return resource;
             });
 
-            String fragmentShader = FileUtil.loadCore("rendertype_text.fsh");
+            String fragmentShader = FileUtil.loadCore("text.fsh");
             StringBuilder importList = new StringBuilder();
             for (Identifier location : ShaderEffects.IMPORTS) {
-                importList.append(String.format("#moj_import <%s>\n", location));
+                importList.append(String.format("#include <%s>\n", location));
             }
             fragmentShader = fragmentShader.replace("//%IMPORTS%", importList);
 
@@ -113,7 +113,10 @@ public class RPHandler {
             if (ADD_LOCAL) builder.addData(String.format("assets/%s/font/%s_local.json", ShaderEffects.FONT.id().getNamespace(), ShaderEffects.FONT.id().getPath()), fontAssetLocal.build().toBytes());
             builder.addData(String.format("assets/%s/textures/font/%s.png", ShaderEffects.FONT.id().getNamespace(), ShaderEffects.FONT.id().getPath()), out.toByteArray());
             if (ADD_LOCAL) builder.addData(String.format("assets/%s/textures/font/%s_local.png", ShaderEffects.FONT.id().getNamespace(), ShaderEffects.FONT.id().getPath()), outLocal.toByteArray());
-            builder.addData("assets/minecraft/shaders/core/rendertype_text.fsh", fragmentShader.getBytes(StandardCharsets.UTF_8));
+            builder.addData("assets/minecraft/shaders/core/text.fsh", fragmentShader.getBytes(StandardCharsets.UTF_8));
+            if (ModConfig.getInstance().dynamicFovShader) {
+                builder.addData("assets/minecraft/shaders/include/projection.glsl", FileUtil.loadBytes("optional/projection.glsl"));
+            }
         });
     }
 

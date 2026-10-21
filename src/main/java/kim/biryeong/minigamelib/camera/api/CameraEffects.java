@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class CameraEffects {
     private static final Map<UUID, Float> FOV_BY_PLAYER = new ConcurrentHashMap<>();
     private static boolean initialized;
+    private static boolean warnedDisabled;
 
     private CameraEffects() {
     }
@@ -42,6 +43,10 @@ public final class CameraEffects {
         Objects.requireNonNull(player, "player");
         if (!Float.isFinite(fov) || fov < 1.0f || fov >= 180.0f) {
             throw new IllegalArgumentException("fov must be finite and in the range [1.0, 180.0)");
+        }
+        if (!kim.biryeong.minigamelib.shaderfx.impl.ModConfig.getInstance().dynamicFovShader && !warnedDisabled) {
+            warnedDisabled = true;
+            org.slf4j.LoggerFactory.getLogger("minigamelib").warn("CameraEffects.setFov needs \"dynamic-fov-shader\": true in config/minigame-lib/shaderfx.json (off by default on 26.3)");
         }
 
         FOV_BY_PLAYER.put(player.getUUID(), fov);

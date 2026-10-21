@@ -1,25 +1,8 @@
-#version 330
+#ifndef MINIGAMELIB_RGBMAP_GLSL
+#define MINIGAMELIB_RGBMAP_GLSL
 
-#moj_import <minecraft:fog.glsl>
-#moj_import <minecraft:globals.glsl>
-#moj_import <minecraft:dynamictransforms.glsl>
-
-//%IMPORTS%
-
-uniform sampler2D Sampler0;
-
-in float sphericalVertexDistance;
-in float cylindricalVertexDistance;
-in vec4 vertexColor;
-in vec2 texCoord0;
-
-flat in int effectId;
-
-flat in int frames;
-flat in int fps;
-flat in float frameheight;
-
-out vec4 fragColor;
+// RGBMapUtils (https://github.com/biryeongtrain/RGBMapUtils): decodes 24-bit colour encoded in map palettes.
+// Requires Sampler0 to be declared before inclusion.
 
 const ivec3 lookup[] = ivec3[128](
 ivec3(89, 125, 39),   ivec3(109, 153, 48),  ivec3(127, 178, 56),  ivec3(67, 94, 29),
@@ -225,10 +208,8 @@ bool isRgbMapEncoded(sampler2D samplerTex) {
     ivec2 bottomLeft = ivec2(1, texSize.y - 2);
     return findBlockOrigin(samplerTex, bottomLeft, texSize, origin);
 }
-void main() {
-    vec4 texColor = texture(Sampler0, texCoord0);
-    vec4 color = texColor * vertexColor * ColorModulator;
 
+vec4 rgbmap_decode(vec4 color) {
     ivec2 texSize = textureSize(Sampler0, 0).xy;
     if (isOpaque(color) && isRgbMapEncoded(Sampler0)) {
         ivec2 pixel = clamp(ivec2(floor(texCoord0 * vec2(texSize))), ivec2(0), texSize - ivec2(1));
@@ -239,36 +220,10 @@ void main() {
             int b3 = decode7u(texelFetch(Sampler0, coord + ivec2(0, 1), 0).rgb);
             int b4 = decode7u(texelFetch(Sampler0, coord + ivec2(1, 1), 0).rgb);
             b1 |= (b4 & 1) << 7; b2 |= (b4 & 2) << 6; b3 |= (b4 & 4) << 5;
-            //int u24 = (b3 << 16) | (b2 << 8) | b1;
-
-            color = vec4(vec3(b3, b2, b1) / 255.0, 1.0);
+            return vec4(vec3(b3, b2, b1) / 255.0, 1.0);
         }
     }
-
-    vec2 centerUV = gl_FragCoord.xy / ScreenSize - 0.5;
-    float ratio = ScreenSize.y / ScreenSize.x;
-
-    if (effectId != 0) {
-        switch (effectId) {
-//%CASES%
-        }
-    }
-
-    // animated emoji
-    if (frames > 1) {
-        int frameI = int(mod(floor(GameTime*1000.0*fps), frames-1));
-        float framePart = 1.0 / float(frames);
-
-        float ty = texCoord0.y*256.0;
-        if (ty > frameheight)
-            discard;
-
-        color = texture(Sampler0, texCoord0  + vec2(0, frameheight/256*(frameI+1))) * vertexColor * ColorModulator;
-    }
-
-    if (color.a < 0.1) {
-        discard;
-    }
-
-    fragColor = apply_fog(color, sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, FogColor);
+    return color;
 }
+
+#endif

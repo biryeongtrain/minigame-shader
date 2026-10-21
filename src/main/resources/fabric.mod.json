@@ -8,7 +8,7 @@
   "contact": {},
   "license": "MIT",
   "icon": "assets/minigamelib/icon.png",
-  "environment": "server",
+  "environment": "*",
   "entrypoints": {
     "main": [
       "kim.biryeong.minigamelib.MinigameLibInitializer"

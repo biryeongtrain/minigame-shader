@@ -1,21 +1,42 @@
 package kim.biryeong.minigamelib.displayhud;
 
 import com.mojang.math.Transformation;
-import eu.pb4.polymer.virtualentity.api.ElementHolder;
-import eu.pb4.polymer.virtualentity.api.elements.DisplayElement;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Brightness;
+import net.minecraft.world.entity.Display;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * A display entity fixed to a player's screen by the DisplayHud core shaders.
+ * <p>
+ * Port of DisplayHUD 2.2 (https://github.com/dorondo0000/DisplayHUD) for Fabric 26.3.
+ * The entity is never added to a level: it only exists on the clients that view it, where it rides
+ * the viewer's own player entity. A HUD is either personal ({@link #spawn(ServerPlayer, String)})
+ * or shared by several players through a {@link GlobalHud}.
+ * <p>
+ * All methods must be called on the server thread. Instances can only be created while the server is running.
+ */
 public abstract class DisplayHud {
+    /**
+     * Above-hand marker brightness (block 1 / sky 2). Must match {@code DISPLAYHUD_ABOVE_HAND_LIGHT} in
+     * {@code include/displayhud.glsl}. The HUD shaders ignore brightness, so it has no visible effect.
+     */
+    public static final int ABOVE_HAND_BLOCK_LIGHT = 1;
+    public static final int ABOVE_HAND_SKY_LIGHT = 2;
+    /** Legacy above-hand glow colour. The above-hand trigger glows with it and the pack never outlines it. */
+    public static final int ABOVE_HAND_GLOW_COLOR = 0x01FEFD;
+
     public enum HudAlignment {
         CENTER,
         LEFT,
@@ -23,24 +44,28 @@ public abstract class DisplayHud {
         UNALIGNED
     }
 
-    private static final Map<UUID, Map<String, DisplayHud>> HUD_REGISTRY = new ConcurrentHashMap<>();
+    // ---- static registry helpers --------------------------------------------------------------------------------
 
     public static DisplayHud getHud(ServerPlayer player, String id) {
-        Objects.requireNonNull(player, "player");
-        Objects.requireNonNull(id, "id");
-
-        Map<String, DisplayHud> huds = HUD_REGISTRY.get(player.getUUID());
-        return huds != null ? huds.get(id) : null;
+        return HudRegistry.getPersonalHud(player.getUUID(), id);
     }
 
     public static Map<String, DisplayHud> getHuds(ServerPlayer player) {
-        Objects.requireNonNull(player, "player");
+        return HudRegistry.getPersonalHuds(player.getUUID());
+    }
 
-        Map<String, DisplayHud> huds = HUD_REGISTRY.get(player.getUUID());
-        if (huds == null || huds.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        return new HashMap<>(huds);
+    /** Personal HUDs plus the global HUDs shown to this player. */
+    public static Collection<DisplayHud> getVisibleHuds(ServerPlayer player) {
+        return HudRegistry.getVisibleHuds(player.getUUID());
+    }
+
+    /** Entity ids mounted on the player (visible HUDs and the above-hand trigger). */
+    public static int[] getVisibleHudIds(ServerPlayer player) {
+        return HudRegistry.getVisibleHudIds(player.getUUID());
+    }
+
+    public static void mountVisibleHuds(ServerPlayer player) {
+        HudPackets.updateMount(player);
     }
 
     public static void removeHud(ServerPlayer player, String id) {
@@ -51,52 +76,55 @@ public abstract class DisplayHud {
     }
 
     public static void clearHuds(ServerPlayer player) {
-        Objects.requireNonNull(player, "player");
-
-        Map<String, DisplayHud> huds = HUD_REGISTRY.remove(player.getUUID());
-        if (huds == null) {
-            return;
-        }
-
-        for (DisplayHud hud : new HashMap<>(huds).values()) {
-            hud.destroyWithoutRegistryUpdate();
-        }
+        HudRegistry.clearPersonalHuds(player.getUUID());
     }
 
-    static void reattachAll(ServerPlayer oldPlayer, ServerPlayer newPlayer) {
-        Map<String, DisplayHud> huds = HUD_REGISTRY.get(oldPlayer.getUUID());
-        if (huds == null || huds.isEmpty()) {
-            return;
-        }
-
-        HUD_REGISTRY.put(newPlayer.getUUID(), huds);
-        for (DisplayHud hud : new HashMap<>(huds).values()) {
-            hud.reattachPlayer(newPlayer);
-        }
+    private enum HudScope {
+        UNSPAWNED,
+        PERSONAL,
+        GLOBAL,
+        REMOVED
     }
 
-    protected ServerPlayer player;
+    // ---- state --------------------------------------------------------------------------------------------------
+
+    protected final Display display;
+    protected UUID owner;
     protected String id;
     protected UUID uuid;
 
-    protected final DisplayElement display;
-    protected ElementHolder holder;
-    protected OwnerOnlyEntityAttachment attachment;
+    private final Set<UUID> viewers = ConcurrentHashMap.newKeySet();
+    private HudScope hudScope = HudScope.UNSPAWNED;
+    private GlobalHud<?> globalOwner;
+    private boolean defaultsInitialized;
+    /** Internal transparent display that keeps the above-hand post effect running. */
+    boolean aboveHandTrigger;
+
+    protected boolean aboveHand;
+    protected int brightnessBlock = 15;
+    protected int brightnessSky = 15;
 
     protected Vector3f location = new Vector3f(940f, 540f, 0f);
     protected Vector3f scale = new Vector3f(100f, 100f, 1f);
     protected HudAlignment alignment = HudAlignment.CENTER;
 
-    protected boolean removeWhenPlayerDied = false;
+    private final Vector3f translation = new Vector3f();
+    private final Vector3f scaleVector = new Vector3f(1f, 1f, 1f);
+    private final Quaternionf leftRotation = new Quaternionf();
+    private final Quaternionf rightRotation = new Quaternionf();
+
+    protected boolean removeWhenPlayerDied;
+    protected boolean updateWhenDataChanged = true;
 
     protected final Map<String, Object> extraData = new ConcurrentHashMap<>();
 
-    protected DisplayHud(DisplayElement display) {
+    protected DisplayHud(Display display) {
         this.display = Objects.requireNonNull(display, "display");
-        this.display.ignorePositionUpdates();
         this.display.setNoGravity(true);
-        this.display.setTeleportDuration(0);
+        this.display.setPosRotInterpolationDuration(0);
     }
+
+    // ---- lifecycle ----------------------------------------------------------------------------------------------
 
     public boolean spawn(ServerPlayer player, String id) {
         return spawn(player, id, UUID.randomUUID());
@@ -106,73 +134,192 @@ public abstract class DisplayHud {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(uuid, "uuid");
-
-        if (this.player != null) {
+        if (hudScope != HudScope.UNSPAWNED) {
             return false;
         }
-
-        Map<String, DisplayHud> map = HUD_REGISTRY.computeIfAbsent(player.getUUID(), ignored -> new ConcurrentHashMap<>());
-        if (map.containsKey(id)) {
+        if (!HudRegistry.registerPersonalHud(player.getUUID(), id, this)) {
             return false;
         }
-
-        map.put(id, this);
-        this.player = player;
+        this.owner = player.getUUID();
         this.id = id;
         this.uuid = uuid;
-        this.holder = new ElementHolder();
-        this.holder.addPassengerElement(this.display);
-        this.attachment = new OwnerOnlyEntityAttachment(this.holder, player);
-
-        setLeftRotation(getLeftRotationVector());
-        setBrightness(15, 15);
-        setScale(this.scale);
-        setLocation(this.location);
-        this.attachment.enableOwnerWatching();
-        update();
-
+        this.hudScope = HudScope.PERSONAL;
+        initializeDefaults();
+        showTo(player);
         return true;
     }
 
+    /** Re-sends this HUD to every viewer (for example after the client lost its entities). */
     public void respawn() {
-        if (this.player != null) {
-            reattachPlayer(this.player);
+        for (ServerPlayer viewer : viewerPlayers()) {
+            respawnTo(viewer);
+            if (aboveHand) {
+                AboveHandTrigger.respawn(viewer);
+            }
         }
     }
 
     public void remove() {
-        if (this.player == null) {
+        if (hudScope == HudScope.GLOBAL && globalOwner != null) {
+            globalOwner.remove();
             return;
         }
-
-        Map<String, DisplayHud> huds = HUD_REGISTRY.get(this.player.getUUID());
-        if (huds != null) {
-            huds.remove(this.id);
-            if (huds.isEmpty()) {
-                HUD_REGISTRY.remove(this.player.getUUID());
-            }
+        removePacketsFromViewers();
+        if (hudScope == HudScope.PERSONAL && owner != null && id != null) {
+            HudRegistry.unregisterPersonalHud(owner, id, this);
         }
-
-        destroyWithoutRegistryUpdate();
+        hudScope = HudScope.REMOVED;
     }
 
+    public boolean isRemoved() {
+        return hudScope == HudScope.REMOVED;
+    }
+
+    /** Sends changed entity data to every viewer. Called automatically unless {@link #updateWhenDataChanged(boolean)} is off. */
     public void update() {
-        if (this.holder != null) {
-            this.holder.tick();
+        if (id == null) return;
+        List<SynchedEntityData.DataValue<?>> metadata = display.getEntityData().packDirty();
+        if (metadata == null || metadata.isEmpty()) return;
+        for (ServerPlayer viewer : viewerPlayers()) {
+            HudPackets.update(viewer, getEntityId(), metadata);
         }
     }
 
     public void teleport() {
-        if (this.attachment != null) {
-            this.attachment.restartForOwner();
+        for (ServerPlayer viewer : viewerPlayers()) {
+            teleportTo(viewer);
         }
     }
 
     public void mount() {
-        if (this.attachment != null) {
-            this.attachment.refreshMount();
+        for (ServerPlayer viewer : viewerPlayers()) {
+            mountTo(viewer);
         }
     }
+
+    boolean attachGlobal(GlobalHud<?> owner, String id, UUID uuid) {
+        if (hudScope != HudScope.UNSPAWNED) {
+            return false;
+        }
+        this.id = id;
+        this.uuid = uuid;
+        this.globalOwner = owner;
+        this.hudScope = HudScope.GLOBAL;
+        initializeDefaults();
+        return true;
+    }
+
+    void removeGlobal() {
+        removePacketsFromViewers();
+        hudScope = HudScope.REMOVED;
+    }
+
+    boolean showTo(ServerPlayer viewer) {
+        Objects.requireNonNull(viewer, "viewer");
+        if (uuid == null) {
+            uuid = UUID.randomUUID();
+        }
+        initializeDefaults();
+        if (!viewers.add(viewer.getUUID())) {
+            return false;
+        }
+        HudPackets.spawn(viewer, display, uuid);
+        sendFullUpdate(viewer);
+        mountTo(viewer);
+        if (!aboveHandTrigger) {
+            AboveHandTrigger.refresh(viewer);
+        }
+        return true;
+    }
+
+    boolean hideFrom(ServerPlayer viewer) {
+        Objects.requireNonNull(viewer, "viewer");
+        if (!viewers.remove(viewer.getUUID())) {
+            return false;
+        }
+        HudPackets.remove(viewer, getEntityId());
+        HudPackets.updateMount(viewer);
+        if (!aboveHandTrigger) {
+            AboveHandTrigger.refresh(viewer);
+        }
+        return true;
+    }
+
+    /** Drops a viewer that already disconnected without sending packets. */
+    void forgetViewer(UUID viewer) {
+        viewers.remove(viewer);
+    }
+
+    boolean isShownTo(ServerPlayer viewer) {
+        return viewers.contains(viewer.getUUID());
+    }
+
+    void respawnTo(ServerPlayer viewer) {
+        if (!viewers.contains(viewer.getUUID())) return;
+        HudPackets.remove(viewer, getEntityId());
+        HudPackets.spawn(viewer, display, uuid);
+        sendFullUpdate(viewer);
+        mountTo(viewer);
+    }
+
+    void teleportTo(ServerPlayer viewer) {
+        if (!viewers.contains(viewer.getUUID())) return;
+        HudPackets.teleport(viewer, getEntityId());
+    }
+
+    void mountTo(ServerPlayer viewer) {
+        if (!viewers.contains(viewer.getUUID())) return;
+        HudPackets.updateMount(viewer);
+    }
+
+    boolean isGlobalHud() {
+        return hudScope == HudScope.GLOBAL;
+    }
+
+    GlobalHud<?> getGlobalOwner() {
+        return globalOwner;
+    }
+
+    Set<UUID> getViewerIds() {
+        return new LinkedHashSet<>(viewers);
+    }
+
+    List<ServerPlayer> viewerPlayers() {
+        return DisplayHudManager.resolve(viewers);
+    }
+
+    private void removePacketsFromViewers() {
+        for (ServerPlayer viewer : viewerPlayers()) {
+            hideFrom(viewer);
+        }
+        viewers.clear();
+    }
+
+    private void initializeDefaults() {
+        if (defaultsInitialized) return;
+        boolean update = updateWhenDataChanged;
+        updateWhenDataChanged = false;
+        setLeftRotation(getLeftRotationVector());
+        applyBrightness();
+        setScale(scale);
+        setLocation(location);
+        updateWhenDataChanged = update;
+        defaultsInitialized = true;
+    }
+
+    private void sendFullUpdate(ServerPlayer viewer) {
+        // Clear the dirty flags first so the next update() only carries real changes.
+        display.getEntityData().packDirty();
+        List<SynchedEntityData.DataValue<?>> metadata = display.getEntityData().getNonDefaultValues();
+        if (metadata == null || metadata.isEmpty()) return;
+        HudPackets.update(viewer, getEntityId(), metadata);
+    }
+
+    protected final void changed() {
+        if (updateWhenDataChanged) update();
+    }
+
+    // ---- options ------------------------------------------------------------------------------------------------
 
     public void removeWhenPlayerDied() {
         this.removeWhenPlayerDied = true;
@@ -183,27 +330,46 @@ public abstract class DisplayHud {
     }
 
     public boolean isRemovedWhenPlayerDied() {
-        return this.removeWhenPlayerDied;
+        return removeWhenPlayerDied;
     }
 
+    /** Send every change immediately (default). Turn off to batch several setters and call {@link #update()} once. */
+    public void updateWhenDataChanged() {
+        this.updateWhenDataChanged = true;
+    }
+
+    public void updateWhenDataChanged(boolean toggle) {
+        this.updateWhenDataChanged = toggle;
+    }
+
+    public boolean isUpdatedWhenDataChanged() {
+        return updateWhenDataChanged;
+    }
+
+    /** The owner of a personal HUD, or {@code null} for global or unspawned HUDs and offline owners. */
     public ServerPlayer getPlayer() {
-        return this.player;
+        return owner == null ? null : DisplayHudManager.player(owner);
+    }
+
+    public UUID getOwnerUuid() {
+        return owner;
     }
 
     public String getId() {
-        return this.id;
+        return id;
     }
 
     public UUID getUuid() {
-        return this.uuid;
+        return uuid;
     }
 
-    public DisplayElement getDisplay() {
-        return this.display;
+    /** The vanilla display entity backing this HUD. It is never added to a level. */
+    public Display getDisplay() {
+        return display;
     }
 
     public int getEntityId() {
-        return this.display.getEntityId();
+        return display.getId();
     }
 
     public int getNMSid() {
@@ -213,25 +379,32 @@ public abstract class DisplayHud {
     public void setExtraData(String key, Object value) {
         Objects.requireNonNull(key, "key");
         if (value == null) {
-            this.extraData.remove(key);
+            extraData.remove(key);
         } else {
-            this.extraData.put(key, value);
+            extraData.put(key, value);
         }
     }
 
     public Object getExtraData(String key) {
-        Objects.requireNonNull(key, "key");
-        return this.extraData.get(key);
+        return extraData.get(Objects.requireNonNull(key, "key"));
     }
 
     public boolean hasExtraData(String key) {
-        Objects.requireNonNull(key, "key");
-        return this.extraData.containsKey(key);
+        return extraData.containsKey(Objects.requireNonNull(key, "key"));
     }
 
     public Object removeExtraData(String key) {
-        Objects.requireNonNull(key, "key");
-        return this.extraData.remove(key);
+        return extraData.remove(Objects.requireNonNull(key, "key"));
+    }
+
+    // ---- transformation -----------------------------------------------------------------------------------------
+
+    private void applyTransformation(int time) {
+        display.setTransformation(new Transformation(new Vector3f(translation), new Quaternionf(leftRotation),
+                new Vector3f(scaleVector), new Quaternionf(rightRotation)));
+        display.setTransformationInterpolationDelay(0);
+        display.setTransformationInterpolationDuration(time);
+        changed();
     }
 
     public void setLocation(float x, float y, float z) {
@@ -246,19 +419,16 @@ public abstract class DisplayHud {
         setLocation(location, 0);
     }
 
-    public void setLocation(Vector3f location, Integer time) {
+    public void setLocation(Vector3f location, int time) {
         this.location = new Vector3f(location);
         Vector3f translated = getLocationVector();
         translated.y -= getAlignmentInt();
-
-        this.display.setTranslation(translated);
-        this.display.setStartInterpolation(0);
-        this.display.setInterpolationDuration(time);
-        update();
+        translation.set(translated);
+        applyTransformation(time);
     }
 
     public Vector3f getLocation() {
-        return new Vector3f(this.location);
+        return new Vector3f(location);
     }
 
     public void setScale(float x, float y, float z) {
@@ -273,16 +443,14 @@ public abstract class DisplayHud {
         setScale(scale, 0);
     }
 
-    public void setScale(Vector3f scale, Integer time) {
+    public void setScale(Vector3f scale, int time) {
         this.scale = new Vector3f(scale);
-        this.display.setScale(getScaleVector());
-        this.display.setStartInterpolation(0);
-        this.display.setInterpolationDuration(time);
-        update();
+        scaleVector.set(getScaleVector());
+        applyTransformation(time);
     }
 
     public Vector3f getScale() {
-        return new Vector3f(this.scale);
+        return new Vector3f(scale);
     }
 
     public void setLeftRotation(float x, float y, float z) {
@@ -297,15 +465,13 @@ public abstract class DisplayHud {
         setLeftRotation(vector, 0);
     }
 
-    public void setLeftRotation(Vector3f vector, Integer time) {
-        this.display.setLeftRotation(vecToQuat(vector));
-        this.display.setStartInterpolation(0);
-        this.display.setInterpolationDuration(time);
-        update();
+    public void setLeftRotation(Vector3f vector, int time) {
+        leftRotation.set(vecToQuat(vector));
+        applyTransformation(time);
     }
 
     public Quaternionf getLeftRotation() {
-        return new Quaternionf(this.display.getLeftRotation());
+        return new Quaternionf(leftRotation);
     }
 
     public Vector3f getLeftRotationVector() {
@@ -324,38 +490,40 @@ public abstract class DisplayHud {
         setRightRotation(vector, 0);
     }
 
-    public void setRightRotation(Vector3f vector, Integer time) {
-        this.display.setRightRotation(vecToQuat(vector));
-        this.display.setStartInterpolation(0);
-        this.display.setInterpolationDuration(time);
-        update();
+    public void setRightRotation(Vector3f vector, int time) {
+        rightRotation.set(vecToQuat(vector));
+        applyTransformation(time);
     }
 
     public Quaternionf getRightRotation() {
-        return new Quaternionf(this.display.getRightRotation());
+        return new Quaternionf(rightRotation);
     }
 
     public Vector3f getRightRotationVector() {
         return quatToVec(getRightRotation());
     }
 
+    /** Raw transformation. Bypasses the HUD location/scale helpers. */
     public void setTransformation(Transformation transformation) {
-        this.display.setTransformation(transformation);
-        update();
+        translation.set(transformation.translation());
+        leftRotation.set(transformation.leftRotation());
+        scaleVector.set(transformation.scale());
+        rightRotation.set(transformation.rightRotation());
+        applyTransformation(0);
     }
 
     public void setAlignment(HudAlignment alignment) {
         this.alignment = Objects.requireNonNull(alignment, "alignment");
-        setLocation(this.location, 0);
+        setLocation(location, 0);
     }
 
     public HudAlignment getAlignment() {
-        return this.alignment;
+        return alignment;
     }
 
     public int getAlignmentInt() {
         int gap = DisplayHudManager.alignmentGap;
-        return switch (this.alignment) {
+        return switch (alignment) {
             case LEFT -> gap;
             case CENTER -> gap * 2;
             case RIGHT -> gap * 3;
@@ -363,83 +531,140 @@ public abstract class DisplayHud {
         };
     }
 
-    public void setInterpolationDuration(Integer duration) {
-        this.display.setInterpolationDuration(duration);
-        update();
+    public void setInterpolationDuration(int duration) {
+        display.setTransformationInterpolationDuration(duration);
+        changed();
     }
 
     public int getInterpolationDuration() {
-        return this.display.getInterpolationDuration();
+        return display.getTransformationInterpolationDuration();
     }
 
-    public void setInterpolationDelay(Integer delay) {
-        this.display.setStartInterpolation(delay);
-        update();
+    public void setInterpolationDelay(int delay) {
+        display.setTransformationInterpolationDelay(delay);
+        changed();
     }
 
     public int getInterpolationDelay() {
-        return this.display.getStartInterpolation();
+        return display.getTransformationInterpolationDelay();
     }
 
+    // ---- rendering options --------------------------------------------------------------------------------------
+
+    /**
+     * Brightness override. HUD shaders ignore brightness, so this normally has no visible effect (default 15/15).
+     * While above-hand is on the marker brightness (1/2) is sent instead and this value is applied when it is turned off.
+     */
     public void setBrightness(int block, int sky) {
-        this.display.setBrightness(new Brightness(block, sky));
-        update();
+        brightnessBlock = block;
+        brightnessSky = sky;
+        applyBrightness();
+        changed();
     }
 
     public int getBrightnessBlock() {
-        Brightness brightness = this.display.getBrightness();
-        return brightness != null ? brightness.block() : -1;
+        return brightnessBlock;
     }
 
     public int getBrightnessSky() {
-        Brightness brightness = this.display.getBrightness();
-        return brightness != null ? brightness.sky() : -1;
+        return brightnessSky;
+    }
+
+    private void applyBrightness() {
+        display.setBrightnessOverride(aboveHand
+                ? new Brightness(ABOVE_HAND_BLOCK_LIGHT, ABOVE_HAND_SKY_LIGHT)
+                : new Brightness(brightnessBlock, brightnessSky));
+    }
+
+    /**
+     * Draws this HUD above the first-person hand and held item (DisplayHud 2.2). Needs the 2.2 shaders and the
+     * {@code entity_outline} post effect shipped in minigame-lib's pack. A transparent trigger display is attached
+     * automatically to every viewer that sees at least one above-hand HUD.
+     */
+    public void setAboveHand(boolean aboveHand) {
+        if (aboveHandTrigger || this.aboveHand == aboveHand) return;
+        this.aboveHand = aboveHand;
+        applyBrightness();
+        changed();
+        for (ServerPlayer viewer : viewerPlayers()) {
+            AboveHandTrigger.refresh(viewer);
+        }
+    }
+
+    public boolean isAboveHand() {
+        return aboveHand;
+    }
+
+    /** Vanilla glow outline. Colour: {@link #setGlowColorOverride(int)}. Works together with above-hand. */
+    public void setGlowing(boolean glowing) {
+        display.setGlowingTag(glowing);
+        changed();
+    }
+
+    public boolean isGlowing() {
+        return display.hasGlowingTag();
     }
 
     public void setHeight(float height) {
-        this.display.setDisplayHeight(height);
-        update();
+        display.setHeight(height);
+        changed();
     }
 
     public float getHeight() {
-        return this.display.getDisplayHeight();
+        return display.getHeight();
     }
 
     public void setWidth(float width) {
-        this.display.setDisplayWidth(width);
-        update();
+        display.setWidth(width);
+        changed();
     }
 
     public float getWidth() {
-        return this.display.getDisplayWidth();
+        return display.getWidth();
     }
 
     public void setGlowColorOverride(int color) {
-        this.display.setGlowColorOverride(color);
-        update();
+        display.setGlowColorOverride(color);
+        changed();
     }
 
     public int getGlowColorOverride() {
-        return this.display.getGlowColorOverride();
+        return display.getGlowColorOverride();
     }
 
     public void setViewRange(float viewRange) {
-        this.display.setViewRange(viewRange);
-        update();
+        display.setViewRange(viewRange);
+        changed();
     }
 
     public float getViewRange() {
-        return this.display.getViewRange();
+        return display.getViewRange();
     }
 
+    // ---- maths --------------------------------------------------------------------------------------------------
+
+    /** Translation sent to the client before the alignment offset. Overridden per display type. */
     public Vector3f getLocationVector() {
-        return new Vector3f(this.location);
+        return new Vector3f(location);
     }
 
     public Vector3f getScaleVector() {
         float unitX = DisplayHudManager.unitX;
         float unitY = DisplayHudManager.unitY;
-        return new Vector3f(this.scale.x * unitX, this.scale.y * unitY, this.scale.z * unitX);
+        return new Vector3f(scale.x * unitX, scale.y * unitY, scale.z * unitX);
+    }
+
+    /** Shared screen-space to translation conversion used by the item/block/text HUDs. */
+    protected Vector3f screenTranslation(double offsetX, double offsetY, double offsetZ) {
+        double unitX = DisplayHudManager.unitX;
+        double unitY = DisplayHudManager.unitY;
+        double screenX = DisplayHudManager.screenX;
+        double screenY = DisplayHudManager.screenY;
+        int alignmentGap = DisplayHudManager.alignmentGap;
+        double newX = ((screenX / 2) - location.x - offsetX) * unitX;
+        double newY = -1.5 * alignmentGap - 0.178 + (((screenY / 2) - location.y - offsetY) * unitY);
+        double newZ = (unitX * offsetZ) - (location.z * 100);
+        return new Vector3f((float) newX, (float) newY, (float) newZ);
     }
 
     public static Quaternionf vecToQuat(Vector3f vector) {
@@ -453,39 +678,10 @@ public abstract class DisplayHud {
     public static Vector3f quatToVec(Quaternionf quat) {
         Vector3f eulerRad = new Vector3f();
         quat.getEulerAnglesZYX(eulerRad);
-
         return new Vector3f(
                 (float) Math.toDegrees(eulerRad.x),
                 (float) Math.toDegrees(eulerRad.y),
                 (float) Math.toDegrees(eulerRad.z)
         );
-    }
-
-    private void reattachPlayer(ServerPlayer newPlayer) {
-        if (this.holder == null) {
-            return;
-        }
-
-        if (this.player != null) {
-            this.holder.stopWatching(this.player);
-        }
-        if (this.attachment != null) {
-            this.attachment.destroy();
-        }
-
-        this.player = newPlayer;
-        this.attachment = new OwnerOnlyEntityAttachment(this.holder, newPlayer);
-        this.attachment.enableOwnerWatching();
-        update();
-    }
-
-    private void destroyWithoutRegistryUpdate() {
-        if (this.holder != null) {
-            this.holder.destroy();
-        }
-        this.attachment = null;
-        this.holder = null;
-        this.player = null;
-        this.id = null;
     }
 }

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "minigamelib:item/above_hand_trigger"
+  }
+}

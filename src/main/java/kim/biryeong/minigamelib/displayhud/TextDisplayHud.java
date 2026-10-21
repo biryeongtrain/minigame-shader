@@ -1,28 +1,30 @@
 package kim.biryeong.minigamelib.displayhud;
 
-import com.mojang.math.Transformation;
-import eu.pb4.polymer.virtualentity.api.elements.TextDisplayElement;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Display;
-import org.joml.Quaternionf;
+import net.minecraft.world.entity.EntityTypes;
 import org.joml.Vector3f;
 
-public final class TextDisplayHud extends DisplayHud {
-    private final TextDisplayElement textDisplay;
+public class TextDisplayHud extends DisplayHud {
+    private final Display.TextDisplay textDisplay;
     private Display.TextDisplay.Align textAlignment = Display.TextDisplay.Align.CENTER;
     private Component rawText = Component.empty();
 
     public TextDisplayHud() {
-        this(new TextDisplayElement());
+        this(new Display.TextDisplay(EntityTypes.TEXT_DISPLAY, DisplayHudManager.level()));
     }
 
-    private TextDisplayHud(TextDisplayElement textDisplay) {
+    private TextDisplayHud(Display.TextDisplay textDisplay) {
         super(textDisplay);
         this.textDisplay = textDisplay;
+        // 26.3 draws the text background with the text shader, so the vanilla default (0x40000000)
+        // would show up as a dark panel behind every HUD. Off by default; see setBackgroundColor.
+        textDisplay.setBackgroundColor(0);
+        textDisplay.setText(withSpacer(rawText));
     }
 
-    public TextDisplayElement getTextDisplay() {
-        return this.textDisplay;
+    public Display.TextDisplay getTextDisplay() {
+        return textDisplay;
     }
 
     public void setText(String text) {
@@ -30,107 +32,111 @@ public final class TextDisplayHud extends DisplayHud {
     }
 
     public void setText(Component component) {
-        this.rawText = component;
-        this.textDisplay.setText(withSpacer(component));
-        setLocation(this.location);
-        update();
+        rawText = component;
+        textDisplay.setText(withSpacer(component));
+        setLocation(location);
+        changed();
     }
 
     public String getText() {
-        return this.rawText.getString();
+        return rawText.getString();
     }
 
     public Component getTextComponent() {
-        return this.rawText;
+        return rawText;
     }
 
     public void setShadowToggle(boolean toggle) {
-        this.textDisplay.setShadow(toggle);
-        update();
+        setFlag(Display.TextDisplay.FLAG_SHADOW, toggle);
     }
 
-    public void setTextAlignment(Display.TextDisplay.Align textAlignment) {
-        this.textAlignment = textAlignment;
-        this.textDisplay.setTextAlignment(textAlignment);
-        update();
+    public void setTextAlignment(Display.TextDisplay.Align alignment) {
+        byte flags = textDisplay.getFlags();
+        flags &= (byte) ~(Display.TextDisplay.FLAG_ALIGN_LEFT | Display.TextDisplay.FLAG_ALIGN_RIGHT);
+        switch (alignment) {
+            case LEFT -> flags |= Display.TextDisplay.FLAG_ALIGN_LEFT;
+            case RIGHT -> flags |= Display.TextDisplay.FLAG_ALIGN_RIGHT;
+            default -> { }
+        }
+        textDisplay.setFlags(flags);
+        textAlignment = alignment;
+        setLocation(location);
+        changed();
     }
 
     public Display.TextDisplay.Align getTextAlignment() {
-        return this.textAlignment;
+        return textAlignment;
+    }
+
+    /** Background colour (ARGB). 0 = none (default). Visible on 26.3+ only. */
+    public void setBackgroundColor(int argb) {
+        textDisplay.setBackgroundColor(argb);
+        changed();
+    }
+
+    public int getBackgroundColor() {
+        return textDisplay.getBackgroundColor();
     }
 
     public void setLineWidth(int width) {
-        this.textDisplay.setLineWidth(width);
-        this.textDisplay.setText(withSpacer(this.rawText));
-        update();
+        textDisplay.setLineWidth(width);
+        textDisplay.setText(withSpacer(rawText));
+        setLocation(location);
+        changed();
     }
 
     public int getLineWidth() {
-        return this.textDisplay.getLineWidth();
+        return textDisplay.getLineWidth();
     }
 
     public void setOpacity(int opacity) {
-        if (opacity < 0) {
-            opacity = 0;
-        }
-        if (opacity > 255) {
-            opacity = 255;
-        }
-        this.textDisplay.setTextOpacity((byte) (opacity - 256));
-        update();
+        setOpacity(opacity, 0);
+    }
+
+    /** Text opacity 0..255, interpolated over {@code time} ticks (DisplayHud 1.7). */
+    public void setOpacity(int opacity, int time) {
+        int value = Math.clamp(opacity, -128, 255);
+        if (value > 127) value -= 256;
+        textDisplay.setTextOpacity((byte) value);
+        textDisplay.setTransformationInterpolationDelay(0);
+        textDisplay.setTransformationInterpolationDuration(time);
+        changed();
     }
 
     @Override
-    public void setLeftRotation(Vector3f vector, Integer time) {
-        Vector3f adjusted = new Vector3f(vector).add(0, 180, 0);
-        Quaternionf quat = vecToQuat(adjusted);
-        this.display.setLeftRotation(quat);
-        this.display.setStartInterpolation(0);
-        this.display.setInterpolationDuration(time);
-        update();
+    public void setLeftRotation(Vector3f vector, int time) {
+        super.setLeftRotation(new Vector3f(vector).add(0, 180, 0), time);
     }
 
     @Override
     public Vector3f getLocationVector() {
         Vector3f scale = new Vector3f(this.scale);
         double offsetX = 0;
-        double offsetY;
-        double offsetZ = 0;
-
-        String text = getText();
-        offsetY = -scale.y / 2;
-        int lines = countLinesNl(text);
-        offsetY += (scale.y / 4.0) * (lines - 1.5);
-        int lineWidth = this.textDisplay.getLineWidth();
-        switch (this.textAlignment) {
+        double offsetY = -scale.y / 2;
+        offsetY += (scale.y / 4.0) * (countLines(getText()) - 1.5);
+        int lineWidth = textDisplay.getLineWidth();
+        switch (textAlignment) {
             case LEFT -> offsetX = scale.x * ((lineWidth * 0.0125) - 0.5);
             case RIGHT -> offsetX = scale.x * ((lineWidth * -0.0125) - 0.55);
-            case CENTER -> scale.x = 0;
+            default -> scale.x = 0;
         }
         offsetX += scale.x / 2;
         offsetY += scale.y / 2;
-
-        double unitX = DisplayHudManager.unitX;
-        double unitY = DisplayHudManager.unitY;
-        double screenX = DisplayHudManager.screenX;
-        double screenY = DisplayHudManager.screenY;
-        int alignmentGap = DisplayHudManager.alignmentGap;
-        double newX = ((screenX / 2) - this.location.x - offsetX) * unitX;
-        double newY = -1.5 * alignmentGap - 0.178 + (((screenY / 2) - this.location.y - offsetY) * unitY);
-        double newZ = (unitX * offsetZ) - (this.location.z * 100);
-        return new Vector3f((float) newX, (float) newY, (float) newZ);
+        return screenTranslation(offsetX, offsetY, 0);
     }
 
-    @Override
-    public void setTransformation(Transformation transformation) {
-        super.setTransformation(transformation);
+    private void setFlag(byte flag, boolean on) {
+        byte flags = textDisplay.getFlags();
+        textDisplay.setFlags((byte) (on ? (flags | flag) : (flags & ~flag)));
+        changed();
     }
 
+    /** The first line is a blank spacer of {@code lineWidth} spaces so every HUD keeps a constant width. */
     private Component withSpacer(Component component) {
-        return Component.literal(" ".repeat(Math.max(0, getLineWidth())) + "\n").append(component);
+        return Component.literal(" ".repeat(Math.max(0, textDisplay.getLineWidth())) + "\n").append(component);
     }
 
-    private static int countLinesNl(String text) {
+    private static int countLines(String text) {
         return text == null || text.isEmpty() ? 1 : text.split("\n").length;
     }
 }

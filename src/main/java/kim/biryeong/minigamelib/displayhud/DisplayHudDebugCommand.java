@@ -87,12 +87,17 @@ public final class DisplayHudDebugCommand {
                                                                         FloatArgumentType.getFloat(context, "z"),
                                                                         IntegerArgumentType.getInteger(context, "time")
                                                                 ))))))))
+                .then(Commands.literal("abovehand")
+                        .executes(context -> aboveHand(context.getSource())))
+                .then(Commands.literal("global")
+                        .then(Commands.literal("show").executes(context -> globalShow(context.getSource())))
+                        .then(Commands.literal("hide").executes(context -> globalHide(context.getSource())))
+                        .then(Commands.literal("remove").executes(context -> { GlobalHud.removeHud(GLOBAL_ID); return 1; })))
                 .then(Commands.literal("clear")
                         .executes(context -> clear(context.getSource())));
     }
 
     private static int spawnDemo(CommandSourceStack source) throws CommandSyntaxException {
-        useShaderDefaults();
         clear(source.getPlayerOrException());
         ServerPlayer player = source.getPlayerOrException();
 
@@ -105,7 +110,6 @@ public final class DisplayHudDebugCommand {
     }
 
     private static int spawnText(CommandSourceStack source, String message) throws CommandSyntaxException {
-        useShaderDefaults();
         ServerPlayer player = source.getPlayerOrException();
         createText(player, message, 960, 420, 70);
         source.sendSuccess(() -> Component.literal("Spawned text HUD."), false);
@@ -113,7 +117,6 @@ public final class DisplayHudDebugCommand {
     }
 
     private static int spawnItem(CommandSourceStack source, ItemStack stack) throws CommandSyntaxException {
-        useShaderDefaults();
         ServerPlayer player = source.getPlayerOrException();
         createItem(player, stack, 960, 540, 80);
         source.sendSuccess(() -> Component.literal("Spawned item HUD."), false);
@@ -121,7 +124,6 @@ public final class DisplayHudDebugCommand {
     }
 
     private static int spawnBlock(CommandSourceStack source) throws CommandSyntaxException {
-        useShaderDefaults();
         ServerPlayer player = source.getPlayerOrException();
         createBlock(player, 960, 540, 80);
         source.sendSuccess(() -> Component.literal("Spawned block HUD."), false);
@@ -148,15 +150,50 @@ public final class DisplayHudDebugCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    private static final String GLOBAL_ID = "debug:global";
+
+    private static int aboveHand(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        TextDisplayHud text = createText(player, "Above hand", 960, 620, 60);
+        text.setAboveHand(true);
+        ItemDisplayHud item = createItem(player, new ItemStack(Items.DIAMOND_SWORD), 1040, 700, 90);
+        item.setAboveHand(true);
+        source.sendSuccess(() -> Component.literal("Spawned above-hand HUDs (text + item)."), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static int globalShow(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        GlobalHud<TextDisplayHud> global = (GlobalHud<TextDisplayHud>) GlobalHud.getHud(GLOBAL_ID);
+        if (global == null) {
+            global = GlobalHud.text(GLOBAL_ID);
+            TextDisplayHud hud = global.getHud();
+            hud.setLineWidth(200);
+            hud.setShadowToggle(true);
+            hud.setText(Component.literal("GlobalHud: shared by every viewer"));
+            hud.setScale(40, 40, 1);
+            hud.setAlignment(DisplayHud.HudAlignment.LEFT);
+            hud.setLocation(200, 80, 0);
+        }
+        global.show(player);
+        source.sendSuccess(() -> Component.literal("Showing " + GLOBAL_ID + "."), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int globalHide(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        GlobalHud<?> global = GlobalHud.getHud(GLOBAL_ID);
+        if (global != null) global.hide(player);
+        return Command.SINGLE_SUCCESS;
+    }
+
     private static void clear(ServerPlayer player) {
         for (String id : TEST_IDS) {
             DisplayHud.removeHud(player, id);
         }
     }
 
-    private static void useShaderDefaults() {
-        DisplayHudManager.configure(1f, 1f, 1920f, 1080f, 10_000);
-    }
 
     private static TextDisplayHud createText(ServerPlayer player, String message, float x, float y, float size) {
         DisplayHud.removeHud(player, TEXT_ID);

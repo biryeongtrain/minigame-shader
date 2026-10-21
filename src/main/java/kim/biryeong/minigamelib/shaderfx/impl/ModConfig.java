@@ -26,6 +26,8 @@ public class ModConfig {
     public boolean addAssets = true;
     public boolean enableAnimatedEmojiConversion = true;
     public boolean markAsRequired = true;
+    /** Ships the Dynamic FOV projection override used by CameraEffects.setFov. Off by default on 26.3 (see README). */
+    public boolean dynamicFovShader = false;
     public JoinEffect joinEffect = new JoinEffect(true, "transition", ShaderEffects.TRANSITION_ENCLOSING_TRIANGLES.location(), 0x0, 15, 20);
 
     public record JoinEffect(boolean enabled, String type, Identifier effect, int color, int stay, int fadeOut) {
