@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class MusicPacks {
     public record Published(MusicCatalog catalog, String hash) {}
-    private static final ThreadLocal<MusicCatalog> BUILD = new ThreadLocal<>();
+    private static final java.util.concurrent.atomic.AtomicReference<MusicCatalog> BUILD = new java.util.concurrent.atomic.AtomicReference<>();
     private static final Map<UUID, PackReadiness> LISTENERS = new ConcurrentHashMap<>();
     private static volatile Published published = new Published(MusicCatalog.empty(), "");
     private MusicPacks() {}
@@ -29,9 +29,9 @@ public final class MusicPacks {
         });
     }
     public static Published published() { return published; }
-    public static void begin() { BUILD.remove(); }
+    public static void begin() { BUILD.set(null); }
     public static void finish(Path output, boolean success) {
-        var candidate = BUILD.get(); BUILD.remove();
+        var candidate = BUILD.getAndSet(null);
         if (!success || candidate == null) return;
         try (var stream = Files.newInputStream(output)) {
             var digest = MessageDigest.getInstance("SHA-1");
@@ -42,23 +42,23 @@ public final class MusicPacks {
     }
     public static ClientboundResourcePackPushPacket sent(ServerCommonPacketListenerImpl handler, ClientboundResourcePackPushPacket packet) {
         if (!packet.id().equals(PolymerResourcePackUtils.getMainUuid())) return packet;
-        var previous = LISTENERS.get(handler.getOwner().getId());
+        var previous = LISTENERS.get(handler.getOwner().id());
         if (previous != null) handler.send(new ClientboundResourcePackPopPacket(Optional.of(previous.id())));
         // Polymer reuses one UUID. A fresh wire UUID prevents an old load ACK from approving a newer build.
         var sent = new ClientboundResourcePackPushPacket(UUID.randomUUID(),packet.url(),packet.hash(),packet.required(),packet.prompt());
-        LISTENERS.put(handler.getOwner().getId(), new PackReadiness(sent.id(), sent.hash(), false));
+        LISTENERS.put(handler.getOwner().id(), new PackReadiness(sent.id(), sent.hash(), false));
         if (handler instanceof ServerGamePacketListenerImpl game) interrupt(game.player);
         return sent;
     }
     public static ServerboundResourcePackPacket response(ServerCommonPacketListenerImpl handler, ServerboundResourcePackPacket packet) {
-        var state = LISTENERS.get(handler.getOwner().getId());
+        var state = LISTENERS.get(handler.getOwner().id());
         if (state == null || !state.id().equals(packet.id())) return packet;
-        LISTENERS.replace(handler.getOwner().getId(),state,state.acknowledged(packet.id(),packet.action() == ServerboundResourcePackPacket.Action.SUCCESSFULLY_LOADED));
+        LISTENERS.replace(handler.getOwner().id(),state,state.acknowledged(packet.id(),packet.action() == ServerboundResourcePackPacket.Action.SUCCESSFULLY_LOADED));
         // Keep Polymer's native pack tracking under its public main UUID.
         return new ServerboundResourcePackPacket(PolymerResourcePackUtils.getMainUuid(),packet.action());
     }
     public static ClientboundResourcePackPopPacket mapPop(ServerCommonPacketListenerImpl handler, ClientboundResourcePackPopPacket packet) {
-        var state = LISTENERS.get(handler.getOwner().getId());
+        var state = LISTENERS.get(handler.getOwner().id());
         return state != null && packet.id().filter(PolymerResourcePackUtils.getMainUuid()::equals).isPresent()
                 ? new ClientboundResourcePackPopPacket(Optional.of(state.id())) : packet;
     }
@@ -67,14 +67,14 @@ public final class MusicPacks {
         return state != null && state.ready(published.hash);
     }
     private static void interrupt(ServerPlayer player) {
-        player.getServer().execute(() -> { CameraViews.stop(player); MinigameLib.get(player.getServer()).music().interrupted(player); });
+        player.level().getServer().execute(() -> { CameraViews.stop(player); MinigameLib.get(player.level().getServer()).music().interrupted(player); });
     }
     public static void forget(ServerPlayer player) { forget(player.getUUID()); }
     public static void forget(UUID player) { LISTENERS.remove(player); }
     public static void popped(ServerCommonPacketListenerImpl handler, Optional<UUID> id) {
-        var state = LISTENERS.get(handler.getOwner().getId());
+        var state = LISTENERS.get(handler.getOwner().id());
         if (state != null && (id.isEmpty() || state.id().equals(id.get()))) {
-            LISTENERS.remove(handler.getOwner().getId());
+            LISTENERS.remove(handler.getOwner().id());
             if (handler instanceof ServerGamePacketListenerImpl game) interrupt(game.player);
         }
     }

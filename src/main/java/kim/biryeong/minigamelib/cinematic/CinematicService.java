@@ -35,7 +35,7 @@ public final class CinematicService implements AutoCloseable {
         if (tick < 0 || tick >= scene.scene().duration()) throw new IllegalArgumentException("Time is outside scene");
         var targets = List.copyOf(new LinkedHashSet<>(players));
         if (targets.isEmpty()) throw new IllegalArgumentException("No viewers");
-        for (var p : targets) if (p.getServer() != server || p.hasDisconnected() || p.isDeadOrDying() || p.isSleeping() || p.isPassenger())
+        for (var p : targets) if (p.level().getServer() != server || p.hasDisconnected() || p.isDeadOrDying() || p.isSleeping() || p.isPassenger())
             throw new IllegalArgumentException("Viewer must be connected, alive, awake and unmounted");
         for (var p : targets) stop(p, Playback.Status.REPLACED);
         var run = new Run(scene, tick, paused);
@@ -50,7 +50,7 @@ public final class CinematicService implements AutoCloseable {
         } catch (RuntimeException e) { run.finish(Playback.Status.FAILED, e.getMessage()); throw e; }
     }
     public ServerLevel level(String dimension) {
-        var value = server.getLevel(ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(dimension)));
+        var value = server.getLevel(ResourceKey.create(Registries.DIMENSION, Identifier.parse(dimension)));
         if (value == null) throw new IllegalArgumentException("Unknown dimension: " + dimension);
         return value;
     }
@@ -64,8 +64,8 @@ public final class CinematicService implements AutoCloseable {
         for (var cue : scene.scene().cues()) {
             switch (cue.type()) {
                 case MUSIC -> { if (!music.catalog().tracks().containsKey(cue.id()) && !music.catalog().playlists().containsKey(cue.id())) throw new IllegalArgumentException("Unknown music: " + cue.id()); }
-                case TRANSITION -> { if (!ShaderEffects.TRANSITIONS.containsKey(ResourceLocation.parse(cue.id()))) throw new IllegalArgumentException("Unknown transition: " + cue.id()); }
-                case EFFECT -> { if (!ShaderEffects.EFFECTS.containsKey(ResourceLocation.parse(cue.id()))) throw new IllegalArgumentException("Unknown effect: " + cue.id()); }
+                case TRANSITION -> { if (!ShaderEffects.TRANSITIONS.containsKey(Identifier.parse(cue.id()))) throw new IllegalArgumentException("Unknown transition: " + cue.id()); }
+                case EFFECT -> { if (!ShaderEffects.EFFECTS.containsKey(Identifier.parse(cue.id()))) throw new IllegalArgumentException("Unknown effect: " + cue.id()); }
                 case STOP_MUSIC -> {}
             }
         }
@@ -172,7 +172,7 @@ public final class CinematicService implements AutoCloseable {
             }
         }
         void visualCue(Cue cue) {
-            var id = ResourceLocation.parse(cue.id());
+            var id = Identifier.parse(cue.id());
             Component text = cue.type() == CueType.TRANSITION ? ShaderEffects.transitionComponent(id, cue.color()) : ShaderEffects.effectComponent(id, cue.color());
             int opacity = cue.type() == CueType.TRANSITION ? Math.round(255f * (1f - (float)(time - cue.tick()) / cue.duration())) : 255;
             for (var view : views.values()) view.visualEffect(text,opacity);
@@ -196,13 +196,13 @@ public final class CinematicService implements AutoCloseable {
         final Map<ServerPlayer, ServerLevel> viewers = new HashMap<>();
         Actor(Entity entity, EntityTrack track) { this.entity = entity; this.track = track; entity.setNoGravity(true); }
         static Actor create(EntityTrack track, ServerLevel level) {
-            var key = ResourceLocation.parse(track.type());
+            var key = Identifier.parse(track.type());
             if (!key.getNamespace().equals("minecraft") || !BuiltInRegistries.ENTITY_TYPE.containsKey(key)) throw new IllegalArgumentException("Expected vanilla entity type");
             var entity = BuiltInRegistries.ENTITY_TYPE.getValue(key).create(level, EntitySpawnReason.COMMAND);
             if (!(entity instanceof Mob) && !(entity instanceof Display)) throw new IllegalArgumentException("Actors support mobs and displays");
             if (entity instanceof Display.ItemDisplay display) display.setItemStack(item(track.item() == null ? "minecraft:stone" : track.item()));
             if (entity instanceof Display.BlockDisplay display) {
-                var block = ResourceLocation.parse(track.block() == null ? "minecraft:stone" : track.block());
+                var block = Identifier.parse(track.block() == null ? "minecraft:stone" : track.block());
                 if (!BuiltInRegistries.BLOCK.containsKey(block)) throw new IllegalArgumentException("Unknown block: " + block);
                 display.setBlockState(BuiltInRegistries.BLOCK.getValue(block).defaultBlockState());
             }
@@ -210,7 +210,7 @@ public final class CinematicService implements AutoCloseable {
             return new Actor(entity, track);
         }
         static ItemStack item(String id) {
-            var key = ResourceLocation.parse(id);
+            var key = Identifier.parse(id);
             if (!BuiltInRegistries.ITEM.containsKey(key)) throw new IllegalArgumentException("Unknown item: " + id);
             return new ItemStack(BuiltInRegistries.ITEM.getValue(key));
         }
@@ -227,7 +227,7 @@ public final class CinematicService implements AutoCloseable {
         void send(CameraViewSession view, int time) {
             if (view.level() != entity.level()) { remove(view.player()); return; }
             if (viewers.get(view.player()) != view.level()) {
-                new ServerEntity(view.level(), entity, 1, false, view::send, (p, ids) -> view.send(p)).sendPairingData(view.player(), view::send);
+                new ServerEntity(view.level(), entity, net.minecraft.world.entity.UpdateInterval.periodic(1), false, CameraViews.synchronizer(view::send)).sendPairingData(view.player(), view::send);
                 viewers.put(view.player(), view.level());
             }
             view.send(ClientboundEntityPositionSyncPacket.of(entity));

@@ -1,5 +1,6 @@
 package kim.biryeong.minigamelib.cinematic;
 
+import net.minecraft.commands.Commands;
 import eu.pb4.polymer.virtualentity.api.ElementHolder;
 import eu.pb4.polymer.virtualentity.api.attachment.ManualAttachment;
 import eu.pb4.polymer.virtualentity.api.elements.*;
@@ -7,7 +8,7 @@ import kim.biryeong.minigamelib.Playback;
 import net.minecraft.core.Holder;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.dialog.*;
 import net.minecraft.server.dialog.action.CustomAll;
@@ -30,13 +31,13 @@ public final class CinematicEditor implements AutoCloseable {
     private final Map<UUID, Session> sessions = new HashMap<>();
     public CinematicEditor(MinecraftServer server, CinematicService service) { this.server = server; this.service = service; }
     public void open(ServerPlayer player) {
-        if (!player.hasPermissions(2)) throw new IllegalArgumentException("Permission level 2 is required");
+        if (!Commands.LEVEL_GAMEMASTERS.check(player.permissions())) throw new IllegalArgumentException("Permission level 2 is required");
         close(player); var session = new Session(player); sessions.put(player.getUUID(), session); session.refresh();
     }
     public void close(ServerPlayer player) { var session = sessions.remove(player.getUUID()); if (session != null) session.close(); }
     public void tick() {
         for (var session : List.copyOf(sessions.values())) {
-            if (session.player.hasDisconnected() || !session.player.hasPermissions(2) || session.player.level() != session.world) close(session.player);
+            if (session.player.hasDisconnected() || !Commands.LEVEL_GAMEMASTERS.check(session.player.permissions()) || session.player.level() != session.world) close(session.player);
             else {
                 if (session.preview != null && session.preview.done()) { session.preview = null; session.refresh(); }
                 if (CameraViews.get(session.player) != null) {
@@ -49,7 +50,7 @@ public final class CinematicEditor implements AutoCloseable {
             }
         }
     }
-    public boolean response(ServerPlayer player, ResourceLocation action, CompoundTag payload) {
+    public boolean response(ServerPlayer player, Identifier action, CompoundTag payload) {
         if (!action.getNamespace().equals("minigamelib") || !action.getPath().startsWith("editor/")) return false;
         var session = sessions.get(player.getUUID());
         if (session != null && session.valid(player) && action.equals(session.dialogId)) {
@@ -79,7 +80,7 @@ public final class CinematicEditor implements AutoCloseable {
         int cursor, page, trackPage, generation, lastClick = -1;
         boolean closed, viewing;
         Playback preview;
-        ResourceLocation dialogId;
+        Identifier dialogId;
         Consumer<CompoundTag> dialog;
         Session(ServerPlayer player) {
             this.player = player; world = player.level();
@@ -89,7 +90,7 @@ public final class CinematicEditor implements AutoCloseable {
             panelYaw = player.getYRot()+180;
             anchor = player.getEyePosition().add(forward.scale(3.4)).add(0,1.15,0);
         }
-        boolean valid(ServerPlayer p) { return !closed && p == player && !p.hasDisconnected() && p.hasPermissions(2) && sessions.get(p.getUUID()) == this; }
+        boolean valid(ServerPlayer p) { return !closed && p == player && !p.hasDisconnected() && Commands.LEVEL_GAMEMASTERS.check(p.permissions()) && sessions.get(p.getUUID()) == this; }
         void tryAction(Edit action) {
             if (!valid(player)) return;
             try { action.run(); refresh(); }
@@ -191,8 +192,7 @@ public final class CinematicEditor implements AutoCloseable {
                     var aim=aim();if(aim==null||aim.x<x-.03||aim.x>x+w+.03||aim.y<y-.03||aim.y>y+h+.03)return;
                     lastClick=server.getTickCount();tryAction(action);
                 }
-                @Override public void interact(ServerPlayer p,InteractionHand hand){if(hand==InteractionHand.MAIN_HAND)click(p);}
-                @Override public void interactAt(ServerPlayer p,InteractionHand hand,Vec3 pos){if(hand==InteractionHand.MAIN_HAND)click(p);}
+                                @Override public void interact(ServerPlayer p,InteractionHand hand,Vec3 pos,boolean secondary){if(hand==InteractionHand.MAIN_HAND)click(p);}
                 @Override public void attack(ServerPlayer p){click(p);}
             };
             // Interaction entities have square footprints; tile wide controls to keep their hitboxes shallow.
@@ -302,7 +302,7 @@ public final class CinematicEditor implements AutoCloseable {
             }
         }
         void drawPath(Object value) {
-            if(!dimension(value).equals(world.dimension().location().toString()))return;
+            if(!dimension(value).equals(world.dimension().identifier().toString()))return;
             var frames=frames(value);
             for(var frame:frames)marker(new Vec3(frame.x(),frame.y(),frame.z()),"◆ "+frame.tick(),.6f);
             for(int tick=0,end=frames.getLast().tick(),step=Math.max(1,end/128);tick<end;tick+=step){var f=sample(frames,tick);marker(new Vec3(f.x(),f.y(),f.z()),"·",.3f);}
@@ -315,7 +315,7 @@ public final class CinematicEditor implements AutoCloseable {
         Keyframe capture(int time) { return new Keyframe(time,player.getX(),player.getEyeY(),player.getZ(),player.getYRot(),player.getXRot()); }
         void create(Kind kind) throws IOException {
             String id = kind.name().toLowerCase(Locale.ROOT) + "_" + UUID.randomUUID().toString().substring(0,8);
-            String dimension = world.dimension().location().toString();
+            String dimension = world.dimension().identifier().toString();
             Object value;
             if (kind == Kind.CAMERA) value = new CameraTrack(1,id,"새 카메라",dimension,List.of(capture(0)));
             else if (kind == Kind.ENTITY) value = new EntityTrack(1,id,"새 엔티티",dimension,"minecraft:pig",null,null,null,List.of(capture(0)));
@@ -408,7 +408,7 @@ public final class CinematicEditor implements AutoCloseable {
             if (value instanceof Scene s) resolved=service.catalog().resolve(s,overrides);
             else if (value instanceof CameraTrack c) resolved=new ResolvedScene(new Scene(1,"preview","미리보기",Math.max(cursor+1,Math.max(100,c.keyframes().getLast().tick()+1)),List.of(new Clip(c.id(),0)),List.of(),List.of()),Map.of(c.id(),c),Map.of());
             else {
-                var e=(EntityTrack)value; var c=new CameraTrack(1,"preview_camera","미리보기",world.dimension().location().toString(),List.of(capture(0)));
+                var e=(EntityTrack)value; var c=new CameraTrack(1,"preview_camera","미리보기",world.dimension().identifier().toString(),List.of(capture(0)));
                 resolved=new ResolvedScene(new Scene(1,"preview","미리보기",Math.max(cursor+1,Math.max(100,e.keyframes().getLast().tick()+1)),List.of(new Clip(c.id(),0)),List.of(new Clip(e.id(),0)),List.of()),Map.of(c.id(),c),Map.of(e.id(),e));
             }
             preview=service.preview(resolved,player,cursor,paused);
@@ -425,7 +425,7 @@ public final class CinematicEditor implements AutoCloseable {
         void show(String title,Map<String,String> fields,Map<String,Map<String,String>> choices,Consumer<CompoundTag> callback) {
             String editing = selected;
             var revision = editing == null ? null : drafts.get(editing);
-            dialogId=ResourceLocation.fromNamespaceAndPath("minigamelib","editor/"+UUID.randomUUID());
+            dialogId=Identifier.fromNamespaceAndPath("minigamelib","editor/"+UUID.randomUUID());
             dialog=tag -> {
                 if (!Objects.equals(editing,selected) || (editing != null && drafts.get(editing) != revision)) throw new IllegalArgumentException("편집 상태가 변경되었습니다. 입력 창을 다시 여세요.");
                 callback.accept(tag);
@@ -437,7 +437,7 @@ public final class CinematicEditor implements AutoCloseable {
                 if(options==null && key.equals("delete"))options=Map.of("false","유지 / 추가","true","삭제");
                 if(options==null && key.equals("dimension")) {
                     options=new LinkedHashMap<>();
-                    for(var world:server.levelKeys()) {String id=world.location().toString();options.put(id,switch(id){case "minecraft:overworld"->"오버월드";case "minecraft:the_nether"->"네더";case "minecraft:the_end"->"엔드";default->id;});}
+                    for(var world:server.levelKeys()) {String id=world.identifier().toString();options.put(id,switch(id){case "minecraft:overworld"->"오버월드";case "minecraft:the_nether"->"네더";case "minecraft:the_end"->"엔드";default->id;});}
                 }
                 if(options!=null && !options.isEmpty()) {
                     var entries=new ArrayList<net.minecraft.server.dialog.input.SingleOptionInput.Entry>();

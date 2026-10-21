@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ViewConnectionMixin {
     @Inject(method = "onDisconnect", at = @At("HEAD"))
     private void minigamelib$forgetPack(CallbackInfo ci) {
-        kim.biryeong.minigamelib.music.MusicPacks.forget(((ServerCommonPacketListenerImpl)(Object)this).getOwner().getId());
+        kim.biryeong.minigamelib.music.MusicPacks.forget(((ServerCommonPacketListenerImpl)(Object)this).getOwner().id());
     }
 
     @Inject(method = "send(Lnet/minecraft/network/protocol/Packet;Lio/netty/channel/ChannelFutureListener;)V", at = @At("HEAD"), cancellable = true)
@@ -31,7 +31,7 @@ public abstract class ViewConnectionMixin {
         }
         if ((Object) this instanceof ServerGamePacketListenerImpl handler) {
             if (packet instanceof net.minecraft.network.protocol.game.ClientboundRespawnPacket)
-                kim.biryeong.minigamelib.MinigameLib.get(handler.player.getServer()).music().interrupted(handler.player);
+                kim.biryeong.minigamelib.MinigameLib.get(handler.player.level().getServer()).music().interrupted(handler.player);
         }
         if ((Object) this instanceof ServerGamePacketListenerImpl handler) {
             if (!CameraViews.allow(handler.player, packet)) ci.cancel();
@@ -47,9 +47,9 @@ public abstract class ViewConnectionMixin {
     @Inject(method = "handleCustomClickAction", at = @At("HEAD"), cancellable = true)
     private void minigamelib$dialog(net.minecraft.network.protocol.common.ServerboundCustomClickActionPacket packet, CallbackInfo ci) {
         if ((Object) this instanceof ServerGamePacketListenerImpl handler && packet.id().getNamespace().equals("minigamelib") && packet.id().getPath().startsWith("editor/")) {
-            handler.player.getServer().execute(() -> {
+            handler.player.level().getServer().execute(() -> {
                 if (packet.payload().orElse(null) instanceof net.minecraft.nbt.CompoundTag tag)
-                    kim.biryeong.minigamelib.MinigameLib.get(handler.player.getServer()).editor().response(handler.player, packet.id(), tag);
+                    kim.biryeong.minigamelib.MinigameLib.get(handler.player.level().getServer()).editor().response(handler.player, packet.id(), tag);
             });
             ci.cancel();
         }

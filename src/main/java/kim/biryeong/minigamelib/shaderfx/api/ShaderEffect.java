@@ -1,20 +1,20 @@
 package kim.biryeong.minigamelib.shaderfx.api;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
 
 public class ShaderEffect {
-    final ResourceLocation location;
+    final Identifier location;
     final int id;
     final String snippet;
 
-    public ShaderEffect(ResourceLocation location, int id, String snippet) {
+    public ShaderEffect(Identifier location, int id, String snippet) {
         this.location = location;
         this.id = id;
         this.snippet = snippet;
     }
 
-    public ResourceLocation location() {
+    public Identifier location() {
         return location;
     }
 

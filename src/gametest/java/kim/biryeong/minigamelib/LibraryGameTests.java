@@ -25,9 +25,13 @@ public final class LibraryGameTests {
         connection.setupInboundProtocol(net.minecraft.network.protocol.game.GameProtocols.SERVERBOUND_TEMPLATE.bind(
                 net.minecraft.network.RegistryFriendlyByteBuf.decorator(server.registryAccess()), player.connection), player.connection);
         player.setPos(h.absoluteVec(new Vec3(1,2,1)));
-        player.setClientLoaded(true);
+        player.connection.handleAcceptPlayerLoad(new net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket());
         MinigameLib.get(server).music().joined(player);
         return player;
+    }
+    private static boolean buildMain(java.nio.file.Path output) {
+        try { return !eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils.getInstance().build(output).hadIssues(); }
+        catch (Exception e) { return false; }
     }
     private static void check(GameTestHelper h, boolean result, String message) { h.assertTrue(result,Component.literal(message)); }
     private static List<net.minecraft.network.protocol.Packet<?>> packets(net.minecraft.server.level.ServerPlayer player) {
@@ -39,14 +43,14 @@ public final class LibraryGameTests {
         if(packet instanceof net.minecraft.network.protocol.game.ClientboundBundlePacket bundle)bundle.subPackets().forEach(p->flatten(p,out));else out.add(packet);
     }
     private static void remove(net.minecraft.server.level.ServerPlayer player) {
-        var server=player.getServer();MinigameLib.get(server).editor().close(player);MinigameLib.get(server).cinematics().stop(player);
-        MinigameLib.get(server).music().left(player);server.getPlayerList().remove(player);server.getPlayerList().deop(player.getGameProfile());
+        var server=player.level().getServer();MinigameLib.get(server).editor().close(player);MinigameLib.get(server).cinematics().stop(player);
+        MinigameLib.get(server).music().left(player);server.getPlayerList().remove(player);server.getPlayerList().deop(new net.minecraft.server.players.NameAndId(player.getGameProfile()));
         var channel=CHANNELS.remove(player.getUUID());if(channel!=null)channel.finishAndReleaseAll();
     }
     @GameTest(structure="minigamelib-test:empty", maxTicks=100)
     public void frozenBodyInputDamageCrossDimensionAndRestore(GameTestHelper h) {
         var p=player(h); var server=h.getLevel().getServer();
-        var pig=net.minecraft.world.entity.EntityType.PIG.create(h.getLevel(),net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+        var pig=net.minecraft.world.entity.EntityTypes.PIG.create(h.getLevel(),net.minecraft.world.entity.EntitySpawnReason.COMMAND);
         pig.setPos(p.position());h.getLevel().addFreshEntity(pig);
         try {
             p.setGameMode(GameType.SURVIVAL);
@@ -103,7 +107,7 @@ public final class LibraryGameTests {
         var p=player(h);var other=player(h);var server=h.getLevel().getServer();
         var service=MinigameLib.get(server).cinematics();
         try {
-            var camera=new CameraTrack(1,"test","test",h.getLevel().dimension().location().toString(),List.of(new Keyframe(0,0,100,0,0,0)));
+            var camera=new CameraTrack(1,"test","test",h.getLevel().dimension().identifier().toString(),List.of(new Keyframe(0,0,100,0,0,0)));
             var scene=new ResolvedScene(new Scene(1,"test","test",20,List.of(new Clip("test",0)),List.of(),List.of()),Map.of("test",camera),Map.of());
             var first=service.play(scene,List.of(p));
             other.setHealth(0);
@@ -121,8 +125,8 @@ public final class LibraryGameTests {
     public void editorUsesPrivatePanelsAndOwnerBoundDialogResponses(GameTestHelper h) throws Exception {
         var p=player(h);var other=player(h);var server=h.getLevel().getServer();var editor=MinigameLib.get(server).editor();
         try {
-            server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(p.getGameProfile(),2,false));
-            server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(other.getGameProfile(),2,false));
+            server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(new net.minecraft.server.players.NameAndId(p.getGameProfile()),net.minecraft.server.permissions.LevelBasedPermissionSet.GAMEMASTER,false));
+            server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(new net.minecraft.server.players.NameAndId(other.getGameProfile()),net.minecraft.server.permissions.LevelBasedPermissionSet.GAMEMASTER,false));
             packets(p);packets(other);editor.open(p);
             var output=packets(p);
             check(h,output.stream().anyMatch(x->x instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket),"Editor sent no panel entities");
@@ -134,15 +138,15 @@ public final class LibraryGameTests {
                 if(element instanceof eu.pb4.polymer.virtualentity.api.elements.InteractionElement button&&label.equals("+ NEW")){hit=button;break;}
             }
             check(h,hit!=null,"Camera browser has no create button");
-            var target=new net.minecraft.world.entity.Interaction(net.minecraft.world.entity.EntityType.INTERACTION,p.level());target.setId(hit.getEntityId());
-            var click=net.minecraft.network.protocol.game.ServerboundInteractPacket.createInteractionPacket(target,false,net.minecraft.world.InteractionHand.MAIN_HAND);
+            var target=new net.minecraft.world.entity.Interaction(net.minecraft.world.entity.EntityTypes.INTERACTION,p.level());target.setId(hit.getEntityId());
+            var click=new net.minecraft.network.protocol.game.ServerboundInteractPacket(target.getId(),net.minecraft.world.InteractionHand.MAIN_HAND,net.minecraft.world.phys.Vec3.ZERO,false);
             p.connection.handleInteract(click);
             check(h,QAControls.field(QAControls.session(p),"dialogId")==null,"Off-target click bypassed the panel aim check");
             p.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,hit.getCurrentPos().add(0,hit.getHeight()/2,0));
             p.connection.handleInteract(click);
-            var session=QAControls.session(p);var action=(net.minecraft.resources.ResourceLocation)QAControls.field(session,"dialogId");
+            var session=QAControls.session(p);var action=(net.minecraft.resources.Identifier)QAControls.field(session,"dialogId");
             check(h,action!=null,"Native panel click did not open a dialog");
-            var payload=new net.minecraft.nbt.CompoundTag();payload.putString("name","테스트 카메라");payload.putString("dimension",h.getLevel().dimension().location().toString());
+            var payload=new net.minecraft.nbt.CompoundTag();payload.putString("name","테스트 카메라");payload.putString("dimension",h.getLevel().dimension().identifier().toString());
             editor.response(other,action,payload);
             check(h,Objects.equals(action,QAControls.field(session,"dialogId")),"Another admin consumed the owner's dialog");
             p.connection.handleCustomClickAction(new net.minecraft.network.protocol.common.ServerboundCustomClickActionPacket(action,Optional.of(payload)));
@@ -165,10 +169,10 @@ public final class LibraryGameTests {
             java.nio.file.Files.createDirectories(file.getParent());
             try(var input=getClass().getResourceAsStream("/music/tone4.ogg")){java.nio.file.Files.copy(input,file,java.nio.file.StandardCopyOption.REPLACE_EXISTING);}
             var output=MinigameLib.CONFIG.resolve("test-pack.zip");
-            check(h,eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils.buildMain(output),"Music pack build failed");
+            check(h,buildMain(output),"Music pack build failed");
             var published=kim.biryeong.minigamelib.music.MusicPacks.published();
             check(h,published.catalog().tracks().size()==1,"Successful build did not publish music");
-            check(h,!eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils.buildMain(file.getParent()),"Writing ZIP over a directory must fail");
+            check(h,!buildMain(file.getParent()),"Writing ZIP over a directory must fail");
             check(h,published==kim.biryeong.minigamelib.music.MusicPacks.published(),"Failed build replaced active catalog");
             var id=eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils.getMainUuid();
             var push = new net.minecraft.network.protocol.common.ClientboundResourcePackPushPacket(id,"http://localhost/test",published.hash(),false,Optional.empty());
@@ -203,10 +207,10 @@ public final class LibraryGameTests {
     }
     @GameTest(structure="minigamelib-test:empty",maxTicks=100)
     public void pausedPreviewRebuildsActorsAndActiveEffectWithoutMusic(GameTestHelper h) throws Exception {
-        var p=player(h);var service=MinigameLib.get(p.getServer()).cinematics();
+        var p=player(h);var service=MinigameLib.get(p.level().getServer()).cinematics();
         try {
             var pos=p.position();var key=new Keyframe(0,pos.x,pos.y,pos.z,0,0);
-            String dimension=h.getLevel().dimension().location().toString();
+            String dimension=h.getLevel().dimension().identifier().toString();
             var camera=new CameraTrack(1,"preview","preview",dimension,List.of(key));
             var actor=new EntityTrack(1,"actor","actor",dimension,"minecraft:pig",null,null,null,List.of(key));
             var scene=new Scene(1,"preview","preview",40,List.of(new Clip("preview",0)),List.of(new Clip("actor",0)),
@@ -219,7 +223,7 @@ public final class LibraryGameTests {
             int effectId=((eu.pb4.polymer.virtualentity.api.elements.TextDisplayElement)QAControls.field(CameraViews.get(p),"effect")).getEntityId();
             check(h,output.stream().anyMatch(x -> x instanceof net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket data
                     && data.id()==effectId && data.packedItems().stream().anyMatch(v -> v.value().equals((byte)128))),"Paused transition did not preserve 50 percent native text opacity");
-            var pig=output.stream().filter(x->x instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket add && add.getType()==net.minecraft.world.entity.EntityType.PIG)
+            var pig=output.stream().filter(x->x instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket add && add.getType()==net.minecraft.world.entity.EntityTypes.PIG)
                     .map(x->(net.minecraft.network.protocol.game.ClientboundAddEntityPacket)x).findFirst().orElseThrow();
             check(h,h.getLevel().getEntity(pig.getId())==null,"Preview actor was added to the real world");
             check(h,sounds(output)==0&&!run.done(),"Paused preview played music or advanced to completion");

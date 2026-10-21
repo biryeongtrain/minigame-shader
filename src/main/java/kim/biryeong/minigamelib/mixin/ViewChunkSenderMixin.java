@@ -25,6 +25,6 @@ public abstract class ViewChunkSenderMixin {
     @Redirect(method = "sendNextChunks", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerPlayer;chunkPosition()Lnet/minecraft/world/level/ChunkPos;"))
     private ChunkPos minigamelib$position(ServerPlayer player) {
         var view = CameraViews.get(player);
-        return CameraViews.sending() && view != null ? new ChunkPos(BlockPos.containing(view.position())) : player.chunkPosition();
+        return CameraViews.sending() && view != null ? ChunkPos.containing(BlockPos.containing(view.position())) : player.chunkPosition();
     }
 }

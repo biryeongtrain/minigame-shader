@@ -16,7 +16,7 @@ public final class CameraCommands {
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> dispatcher.register(
                 Commands.literal("minigamelib")
-                        .requires(source -> source.hasPermission(2))
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .then(Commands.literal("fov")
                                 .then(Commands.literal("set")
                                         .then(Commands.argument("player", EntityArgument.player())
@@ -25,7 +25,7 @@ public final class CameraCommands {
                                                             ServerPlayer player = EntityArgument.getPlayer(context, "player");
                                                             float fov = FloatArgumentType.getFloat(context, "degrees");
                                                             CameraEffects.setFov(player, fov);
-                                                            context.getSource().sendSuccess(() -> Component.literal("FOV set to " + fov + " for " + player.getGameProfile().getName()), false);
+                                                            context.getSource().sendSuccess(() -> Component.literal("FOV set to " + fov + " for " + player.getGameProfile().name()), false);
                                                             return Command.SINGLE_SUCCESS;
                                                         }))))
                                 .then(Commands.literal("reset")
@@ -33,7 +33,7 @@ public final class CameraCommands {
                                                 .executes(context -> {
                                                     ServerPlayer player = EntityArgument.getPlayer(context, "player");
                                                     CameraEffects.resetFov(player);
-                                                    context.getSource().sendSuccess(() -> Component.literal("FOV reset for " + player.getGameProfile().getName()), false);
+                                                    context.getSource().sendSuccess(() -> Component.literal("FOV reset for " + player.getGameProfile().name()), false);
                                                     return Command.SINGLE_SUCCESS;
                                                 }))))
         ));

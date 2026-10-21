@@ -4,7 +4,6 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.GameRules;
 
 import java.util.Map;
 import java.util.Objects;
@@ -62,7 +61,7 @@ public final class CameraEffects {
         var level = view == null ? player.level() : view.level();
         Float fov = getFov(player);
         long time = fov == null ? level.getGameTime() : -(long) Math.floor(((fov + 0.5f) / 180.0f) * 24_000.0f);
-        kim.biryeong.minigamelib.cinematic.CameraViews.send(player, new ClientboundSetTimePacket(time, level.getDayTime(), level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)));
+        kim.biryeong.minigamelib.cinematic.CameraViews.send(player, new ClientboundSetTimePacket(time, ((net.minecraft.server.level.ServerLevel) level).clockManager().createFullSyncPacket().clockUpdates()));
     }
 
     private static void sendFov(ServerPlayer player, float fov) {

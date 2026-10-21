@@ -5,7 +5,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import kim.biryeong.minigamelib.shaderfx.api.ShaderEffects;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -14,7 +14,7 @@ import java.nio.file.StandardCopyOption;
 
 public class ModConfig {
     static Gson GSON = new GsonBuilder()
-            .registerTypeHierarchyAdapter(ResourceLocation.class, new SimpleCodecDeserializer<>(ResourceLocation.CODEC))
+            .registerTypeHierarchyAdapter(Identifier.class, new SimpleCodecDeserializer<>(Identifier.CODEC))
             .setPrettyPrinting()
             .disableHtmlEscaping()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_DASHES)
@@ -28,7 +28,7 @@ public class ModConfig {
     public boolean markAsRequired = true;
     public JoinEffect joinEffect = new JoinEffect(true, "transition", ShaderEffects.TRANSITION_ENCLOSING_TRIANGLES.location(), 0x0, 15, 20);
 
-    public record JoinEffect(boolean enabled, String type, ResourceLocation effect, int color, int stay, int fadeOut) {
+    public record JoinEffect(boolean enabled, String type, Identifier effect, int color, int stay, int fadeOut) {
     }
 
     public static ModConfig getInstance() {

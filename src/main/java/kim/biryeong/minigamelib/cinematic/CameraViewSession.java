@@ -11,7 +11,6 @@ import net.minecraft.server.level.*;
 import net.minecraft.server.network.PlayerChunkSender;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -40,7 +39,7 @@ public final class CameraViewSession implements AutoCloseable {
     CameraViewSession(ServerPlayer player) {
         this.player = player;
         previousFov = kim.biryeong.minigamelib.camera.api.CameraEffects.getFov(player);
-        soundAnchor = new Display.ItemDisplay(EntityType.ITEM_DISPLAY, player.level());
+        soundAnchor = new Display.ItemDisplay(net.minecraft.world.entity.EntityTypes.ITEM_DISPLAY, player.level());
         soundAnchor.setId(camera.getEntityId());
         camera.setTeleportDuration(1);
         camera.setNoGravity(true);
@@ -61,7 +60,7 @@ public final class CameraViewSession implements AutoCloseable {
     public Entity soundAnchor() { return soundAnchor; }
     public String failure() { return failure; }
     public void holdCurtain() { autoReveal = false; }
-    public boolean tracks(ChunkPos pos) { return queued.contains(pos.toLong()) && !chunks.isPending(pos.toLong()); }
+    public boolean tracks(ChunkPos pos) { return queued.contains(pos.pack()) && !chunks.isPending(pos.pack()); }
     public void send(Packet<?> packet) { CameraViews.send(player, packet); }
 
     public void move(ServerLevel nextLevel, Vec3 pos, float yaw, float pitch, boolean cut) {
@@ -80,12 +79,12 @@ public final class CameraViewSession implements AutoCloseable {
             new eu.pb4.polymer.virtualentity.api.attachment.ManualAttachment(holder, level, () -> position);
             var info = player.createCommonSpawnInfo(level);
             var spectator = new CommonPlayerSpawnInfo(info.dimensionType(), info.dimension(), info.seed(),
-                    GameType.SPECTATOR, info.gameType(), info.isDebug(), info.isFlat(), info.lastDeathLocation(), info.portalCooldown(), info.seaLevel());
+                    GameType.SPECTATOR, java.util.Optional.of(info.gameType()), info.isDebug(), info.isFlat(), info.lastDeathLocation(), info.portalCooldown(), info.seaLevel());
             send(new ClientboundRespawnPacket(spectator, ClientboundRespawnPacket.KEEP_ALL_DATA));
             var abilities = new net.minecraft.world.entity.player.Abilities();
             abilities.invulnerable = true; abilities.flying = true; abilities.mayfly = true;
             send(new ClientboundPlayerAbilitiesPacket(abilities));
-            send(new ClientboundSetDefaultSpawnPositionPacket(BlockPos.containing(pos), yaw));
+            send(new ClientboundSetDefaultSpawnPositionPacket(net.minecraft.world.level.storage.LevelData.RespawnData.of(level.dimension(), BlockPos.containing(pos), yaw, 0)));
             send(new ClientboundGameEventPacket(ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START, 0));
             environment();
         }
@@ -107,23 +106,23 @@ public final class CameraViewSession implements AutoCloseable {
     }
 
     private void updateRegion() {
-        int radius = Math.max(2, Math.min(player.requestedViewDistance(), player.getServer().getPlayerList().getViewDistance()));
-        var center = new ChunkPos(BlockPos.containing(position));
+        int radius = Math.max(2, Math.min(player.requestedViewDistance(), player.level().getServer().getPlayerList().getViewDistance()));
+        var center = ChunkPos.containing(BlockPos.containing(position));
         var next = new CameraViews.Region(level, center, radius + 1);
         if (next.equals(region)) return;
         CameraViews.acquire(next);
         CameraViews.release(region);
         region = next;
         Set<Long> nextChunks = new HashSet<>();
-        for (int x = center.x - radius; x <= center.x + radius; x++)
-            for (int z = center.z - radius; z <= center.z + radius; z++) nextChunks.add(ChunkPos.asLong(x, z));
+        for (int x = center.x() - radius; x <= center.x() + radius; x++)
+            for (int z = center.z() - radius; z <= center.z() + radius; z++) nextChunks.add(ChunkPos.pack(x, z));
         for (long old : desired) if (!nextChunks.contains(old)) {
-            CameraViews.sending(() -> chunks.dropChunk(player, new ChunkPos(old)));
+            CameraViews.sending(() -> chunks.dropChunk(player, ChunkPos.unpack(old)));
             queued.remove(old);
         }
         desired.clear(); desired.addAll(nextChunks);
         send(new ClientboundSetChunkCacheRadiusPacket(radius));
-        send(new ClientboundSetChunkCacheCenterPacket(center.x, center.z));
+        send(new ClientboundSetChunkCacheCenterPacket(center.x(), center.z()));
     }
 
     public void tick() {
@@ -135,10 +134,10 @@ public final class CameraViewSession implements AutoCloseable {
         }
         CameraViews.sending(() -> chunks.sendNextChunks(player));
         if (!ready) {
-            var center = new ChunkPos(BlockPos.containing(position));
+            var center = ChunkPos.containing(BlockPos.containing(position));
             ready = true;
-            for (int x = center.x - 1; x <= center.x + 1; x++)
-                for (int z = center.z - 1; z <= center.z + 1; z++) ready &= tracks(new ChunkPos(x, z));
+            for (int x = center.x() - 1; x <= center.x() + 1; x++)
+                for (int z = center.z() - 1; z <= center.z() + 1; z++) ready &= tracks(new ChunkPos(x, z));
             ready &= ((kim.biryeong.minigamelib.mixin.ChunkSenderAccessor)chunks).minigamelib$unacknowledged() == 0;
             if (!ready && System.nanoTime() - loadingSince > 15_000_000_000L) {
                 failure = "시네마틱 청크 준비 시간이 초과되었습니다.";
@@ -148,7 +147,7 @@ public final class CameraViewSession implements AutoCloseable {
             if (ready && autoReveal) curtain(false);
         }
         updateEntities();
-        if (player.getServer().getTickCount() % 20 == 0) environment();
+        if (player.level().getServer().getTickCount() % 20 == 0) environment();
     }
 
     private void updateEntities() {
@@ -161,7 +160,7 @@ public final class CameraViewSession implements AutoCloseable {
             if (!tracks(entity.chunkPosition())) continue;
             visible.add(entity.getId());
             if (!entities.containsKey(entity.getId())) {
-                new ServerEntity(level, entity, 1, false, this::send, (p, ignored) -> send(p)).sendPairingData(player, this::send);
+                new ServerEntity(level, entity, net.minecraft.world.entity.UpdateInterval.periodic(1), false, CameraViews.synchronizer(this::send)).sendPairingData(player, this::send);
                 entities.put(entity.getId(), entity);
             }
             send(ClientboundEntityPositionSyncPacket.of(entity));
@@ -211,10 +210,10 @@ public final class CameraViewSession implements AutoCloseable {
             CameraViews.sending(holder::destroy);
             if (!player.hasDisconnected()) {
                 for (int id : entities.keySet()) send(new ClientboundRemoveEntitiesPacket(id));
-                for (long id : queued) send(new ClientboundForgetLevelChunkPacket(new ChunkPos(id)));
+                for (long id : queued) send(new ClientboundForgetLevelChunkPacket(ChunkPos.unpack(id)));
                 send(new ClientboundRespawnPacket(player.createCommonSpawnInfo(player.level()), ClientboundRespawnPacket.KEEP_ALL_DATA));
                 send(new ClientboundSetCameraPacket(player));
-                player.getServer().getPlayerList().sendLevelInfo(player, player.level());
+                player.level().getServer().getPlayerList().sendLevelInfo(player, player.level());
                 player.onUpdateAbilities();
                 player.connection.teleport(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
                 player.setChunkTrackingView(ChunkTrackingView.EMPTY);
@@ -233,12 +232,12 @@ public final class CameraViewSession implements AutoCloseable {
 
     private void restoreEntities() {
         var world = player.level();
-        double radius = Math.min(player.requestedViewDistance(), player.getServer().getPlayerList().getViewDistance()) * 16.0;
+        double radius = Math.min(player.requestedViewDistance(), player.level().getServer().getPlayerList().getViewDistance()) * 16.0;
         var body = player.position();
         for (var entity : world.getEntities((Entity)null, new AABB(body.x-radius,world.getMinY(),body.z-radius,body.x+radius,world.getMaxY(),body.z+radius),
                 e -> e != player && !e.isRemoved() && e.broadcastToPlayer(player))) {
             send(new ClientboundRemoveEntitiesPacket(entity.getId()));
-            new ServerEntity(world,entity,1,false,this::send,(p,ids)->send(p)).sendPairingData(player,this::send);
+            new ServerEntity(world,entity,net.minecraft.world.entity.UpdateInterval.periodic(1),false,CameraViews.synchronizer(this::send)).sendPairingData(player,this::send);
         }
         for (var other : List.copyOf(((eu.pb4.polymer.virtualentity.impl.HolderHolder)player.connection).polymer$getHolders())) {
             if (other.getAttachment() != null && other.getAttachment().getWorld() == world) {

@@ -1,6 +1,6 @@
 package kim.biryeong.minigamelib.shaderfx.api;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
-public record ImageTransition(ResourceLocation location, String character) {
+public record ImageTransition(Identifier location, String character) {
 }

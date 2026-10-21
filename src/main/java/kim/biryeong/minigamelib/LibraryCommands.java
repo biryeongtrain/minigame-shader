@@ -1,5 +1,6 @@
 package kim.biryeong.minigamelib;
 
+import net.minecraft.commands.Commands;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -23,7 +24,7 @@ public final class LibraryCommands {
         return specified ? getPlayers(c,"players") : List.of(c.getSource().getPlayerOrException());
     }
     public static void register() {
-        CommandRegistrationCallback.EVENT.register((dispatcher,access,env)->dispatcher.register(literal("minigamelib").requires(s->s.hasPermission(2))
+        CommandRegistrationCallback.EVENT.register((dispatcher,access,env)->dispatcher.register(literal("minigamelib").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .then(literal("cinematic")
                         .then(literal("editor").executes(c->checked(()->{lib(c).editor().open(c.getSource().getPlayerOrException());return 1;})))
                         .then(literal("list").executes(c->checked(()->{for(var kind:kim.biryeong.minigamelib.cinematic.CinematicData.Kind.values()) c.getSource().sendSuccess(()->Component.literal(kind+": "+list(c,kind)),false);return 1;})))

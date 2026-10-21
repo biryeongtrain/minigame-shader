@@ -19,7 +19,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,10 +37,10 @@ public class MinigameLibInitializer implements ModInitializer {
         if (ModConfig.getInstance().markAsRequired) PolymerResourcePackUtils.markAsRequired();
         PolymerResourcePackUtils.addModAssets(MODID);
 
-        ShaderEffects.addImport(ResourceLocation.withDefaultNamespace("shaderfx_utils.glsl"));
-        ShaderEffects.addImport(ResourceLocation.withDefaultNamespace("spikes.glsl"));
-        ShaderEffects.addImport(ResourceLocation.withDefaultNamespace("fractal1.glsl"));
-        ShaderEffects.addImport(ResourceLocation.withDefaultNamespace("fractal2.glsl"));
+        ShaderEffects.addImport(Identifier.withDefaultNamespace("shaderfx_utils.glsl"));
+        ShaderEffects.addImport(Identifier.withDefaultNamespace("spikes.glsl"));
+        ShaderEffects.addImport(Identifier.withDefaultNamespace("fractal1.glsl"));
+        ShaderEffects.addImport(Identifier.withDefaultNamespace("fractal2.glsl"));
 
         ServerLifecycleEvents.SERVER_STARTING.register(server -> ADVENTURE = MinecraftServerAudiences.of(server));
         DisplayHudManager.init();

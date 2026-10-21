@@ -38,7 +38,7 @@ public abstract class ViewInputMixin {
 
     @Inject(method = "handleChunkBatchReceived", at = @At("HEAD"), cancellable = true)
     private void minigamelib$chunkAck(ServerboundChunkBatchReceivedPacket packet, CallbackInfo ci) {
-        player.getServer().execute(() -> CameraViews.batchReceived(player, packet.desiredChunksPerTick()));
+        player.level().getServer().execute(() -> CameraViews.batchReceived(player, packet.desiredChunksPerTick()));
         ci.cancel();
     }
 }

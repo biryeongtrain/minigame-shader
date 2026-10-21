@@ -1,5 +1,6 @@
 package kim.biryeong.minigamelib.cinematic;
 
+import net.minecraft.commands.Commands;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -9,7 +10,7 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.TicketType;
@@ -24,11 +25,20 @@ import static net.minecraft.commands.arguments.DimensionArgument.*;
 import static net.minecraft.commands.arguments.coordinates.Vec3Argument.*;
 
 public final class CameraViews {
+    /** 26.x ServerEntity synchronizer that routes every packet to one consumer (the viewer). */
+    public static net.minecraft.server.level.ServerEntity.Synchronizer synchronizer(java.util.function.Consumer<net.minecraft.network.protocol.Packet<?>> sink) {
+        return new net.minecraft.server.level.ServerEntity.Synchronizer() {
+            @Override public void sendToTrackingPlayers(net.minecraft.network.protocol.Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener> packet) { sink.accept(packet); }
+            @Override public void sendToTrackingPlayersAndSelf(net.minecraft.network.protocol.Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener> packet) { sink.accept(packet); }
+            @Override public void sendToTrackingPlayersFiltered(net.minecraft.network.protocol.Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener> packet, java.util.function.Predicate<net.minecraft.server.level.ServerPlayer> filter) { sink.accept(packet); }
+        };
+    }
+
     private static final Map<UUID, CameraViewSession> VIEWS = new ConcurrentHashMap<>();
     private static final ThreadLocal<Integer> SENDING = ThreadLocal.withInitial(() -> 0);
     private static final Map<Region, Integer> TICKETS = new HashMap<>();
     private static final Map<UUID, ArrayDeque<net.minecraft.server.network.PlayerChunkSender>> BATCHES = new HashMap<>();
-    private static final TicketType CAMERA_TICKET = new TicketType(0, false, TicketType.TicketUse.LOADING);
+    private static final TicketType CAMERA_TICKET = new TicketType(0L, TicketType.FLAG_LOADING);
     // Only connection, UI and account state may bypass the cinematic world's packet route.
     private static final Set<String> ALLOWED = Set.of("keep_alive", "ping", "disconnect", "custom_payload",
             "system_chat", "player_chat", "disguised_chat", "delete_chat", "chat_suggestions",
@@ -43,10 +53,10 @@ public final class CameraViews {
     private CameraViews() {}
 
     public static void init() {
-        Registry.register(BuiltInRegistries.TICKET_TYPE, ResourceLocation.fromNamespaceAndPath("minigamelib", "camera"), CAMERA_TICKET);
+        Registry.register(BuiltInRegistries.TICKET_TYPE, Identifier.fromNamespaceAndPath("minigamelib", "camera"), CAMERA_TICKET);
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             for (var view : List.copyOf(VIEWS.values())) {
-                if (view.player().getServer() != server) continue;
+                if (view.player().level().getServer() != server) continue;
                 try { view.tick(); }
                 catch (Exception e) {
                     org.slf4j.LoggerFactory.getLogger("minigamelib").error("Camera view failed", e);
@@ -56,10 +66,10 @@ public final class CameraViews {
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> { stop(handler.player); BATCHES.remove(handler.player.getUUID()); });
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> List.copyOf(VIEWS.values()).stream()
-                .filter(v -> v.player().getServer() == server).forEach(CameraViewSession::close));
+                .filter(v -> v.player().level().getServer() == server).forEach(CameraViewSession::close));
         ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> !(entity instanceof ServerPlayer p) || get(p) == null);
         CommandRegistrationCallback.EVENT.register((dispatcher, access, env) -> dispatcher.register(literal("minigamelib")
-                .requires(s -> s.hasPermission(2)).then(literal("cinematic")
+                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).then(literal("cinematic")
                         .then(literal("view").then(argument("dimension", dimension())
                                 .then(argument("position", vec3()).executes(c -> {
                                     var p = c.getSource().getPlayerOrException();

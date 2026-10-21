@@ -43,7 +43,7 @@ public final class RgbMapDebugCommand {
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> dispatcher.register(
                 Commands.literal("rgbmapdebug")
-                        .requires(source -> source.hasPermission(2))
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .executes(context -> show(context.getSource()))
                         .then(Commands.literal("clear")
                                 .executes(context -> clear(context.getSource())))

@@ -11,9 +11,9 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
-import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.item.ItemDisplayContext;
@@ -43,7 +43,7 @@ public final class DisplayHudDebugCommand {
 
     private static LiteralArgumentBuilder<CommandSourceStack> command(SuggestionProvider<CommandSourceStack> ids) {
         return Commands.literal("displayhudtest")
-                .requires(source -> source.hasPermission(2))
+                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .executes(context -> spawnDemo(context.getSource()))
                 .then(Commands.literal("demo")
                         .executes(context -> spawnDemo(context.getSource())))
@@ -67,13 +67,13 @@ public final class DisplayHudDebugCommand {
                 .then(Commands.literal("block")
                         .executes(context -> spawnBlock(context.getSource())))
                 .then(Commands.literal("move")
-                        .then(Commands.argument("id", ResourceLocationArgument.id())
+                        .then(Commands.argument("id", IdentifierArgument.id())
                                 .suggests(ids)
                                 .then(Commands.argument("x", FloatArgumentType.floatArg())
                                         .then(Commands.argument("y", FloatArgumentType.floatArg())
                                                 .then(Commands.argument("z", FloatArgumentType.floatArg())
                                                         .executes(context -> moveHud(context.getSource(),
-                                                                ResourceLocationArgument.getId(context, "id"),
+                                                                IdentifierArgument.getId(context, "id"),
                                                                 FloatArgumentType.getFloat(context, "x"),
                                                                 FloatArgumentType.getFloat(context, "y"),
                                                                 FloatArgumentType.getFloat(context, "z"),
@@ -81,7 +81,7 @@ public final class DisplayHudDebugCommand {
                                                         ))
                                                         .then(Commands.argument("time", IntegerArgumentType.integer(0))
                                                                 .executes(context -> moveHud(context.getSource(),
-                                                                        ResourceLocationArgument.getId(context, "id"),
+                                                                        IdentifierArgument.getId(context, "id"),
                                                                         FloatArgumentType.getFloat(context, "x"),
                                                                         FloatArgumentType.getFloat(context, "y"),
                                                                         FloatArgumentType.getFloat(context, "z"),
@@ -128,7 +128,7 @@ public final class DisplayHudDebugCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int moveHud(CommandSourceStack source, ResourceLocation id, float x, float y, float z, int time) throws CommandSyntaxException {
+    private static int moveHud(CommandSourceStack source, Identifier id, float x, float y, float z, int time) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
         String key = id.toString();
         DisplayHud hud = DisplayHud.getHud(player, key);

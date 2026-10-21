@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.15-SNAPSHOT'
+    id 'net.fabricmc.fabric-loom' version '1.18.2'
     id 'maven-publish'
     id "net.linguica.maven-settings" version "0.5"
 }
@@ -57,53 +57,37 @@ repositories {
 dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.3'
-    if (project.hasProperty('minigameSmoke')) {
-        def harness = file(project.findProperty('smokeHarness') ?: '/Users/qf/IdeaProjects/copper-golem-fabric-1.21.8/coppergolem-fabric-server/build/libs/coppergolem-fabric-server-1.21.8-1.0.0-SNAPSHOT.jar')
-        modRuntimeOnly files(harness)
-        runtimeOnly files(zipTree(harness).matching { include 'META-INF/jars/*.jar' })
-        modRuntimeOnly 'maven.modrinth:carpet:1.4.177'
-    }
     // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings loom.officialMojangMappings()
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
     // Polymer
-    modImplementation("eu.pb4:polymer-core:${project.polymer_version}")
-    modImplementation("eu.pb4:polymer-virtual-entity:${project.polymer_version}")
-    modImplementation("eu.pb4:polymer-resource-pack:${project.polymer_version}")
-    modImplementation("eu.pb4:polymer-resource-pack-extras:${project.polymer_version}")
-    modImplementation("eu.pb4:polymer-autohost:${project.polymer_version}")
-    modImplementation("eu.pb4:polymer-blocks:${project.polymer_version}")
+    implementation("eu.pb4:polymer-core:${project.polymer_version}")
+    implementation("eu.pb4:polymer-virtual-entity:${project.polymer_version}")
+    implementation("eu.pb4:polymer-resource-pack:${project.polymer_version}")
+    implementation("eu.pb4:polymer-resource-pack-extras:${project.polymer_version}")
+    implementation("eu.pb4:polymer-autohost:${project.polymer_version}")
+    implementation("eu.pb4:polymer-blocks:${project.polymer_version}")
 
-    modImplementation include("net.kyori:adventure-platform-fabric:${project.adventure_platform_version}")
+    implementation include("net.kyori:adventure-platform-fabric:${project.adventure_platform_version}")
     implementation "net.kyori:adventure-text-minimessage:${project.adventure_api_version}"
     implementation "net.kyori:adventure-api:${project.adventure_api_version}"
 
     // Server-Translations
-//    modImplementation include("xyz.nucleoid:server-translations-api:${project.server_translations_version}")
-//    modImplementation include("xyz.nucleoid:stimuli:${project.stimuli_version}")
-//    modImplementation("de.tomalbrc:DialogUtils:${project.dialogutils_version}")
+//    implementation include("xyz.nucleoid:server-translations-api:${project.server_translations_version}")
+//    implementation include("xyz.nucleoid:stimuli:${project.stimuli_version}")
+//    implementation("de.tomalbrc:DialogUtils:${project.dialogutils_version}")
 
-//    modImplementation include("xyz.nucleoid:fantasy:${project.fantasy_version}")
-//    modImplementation include("xyz.nucleoid:map-templates:${project.map_templates}")
-//    modImplementation include("eu.pb4:sidebar-api:${project.sidebar_api_version}")
-//    modImplementation include("de.tomalbrc:avatar-renderer:${project.avatar_renderer_version}")
-    modImplementation include("eu.pb4:map-canvas-api:${project.map_canvas_api_version}")
+//    implementation include("xyz.nucleoid:fantasy:${project.fantasy_version}")
+//    implementation include("xyz.nucleoid:map-templates:${project.map_templates}")
+//    implementation include("eu.pb4:sidebar-api:${project.sidebar_api_version}")
+//    implementation include("de.tomalbrc:avatar-renderer:${project.avatar_renderer_version}")
+    implementation include("eu.pb4:map-canvas-api:${project.map_canvas_api_version}")
 
 }
 
-loom {
-    runs {
-        smokeServer {
-            inherit server
-            name 'Minigame Lib smoke server'
-            runDir 'build/minigamelib-smoke'
-        }
-    }
-}
 
 test { useJUnitPlatform() }
 fabricApi {
@@ -114,7 +98,6 @@ fabricApi {
         eula = true
     }
 }
-loom.runs.smokeServer.source(sourceSets.gametest)
 
 processResources {
     inputs.property "version", project.version
@@ -129,7 +112,7 @@ processResources {
     }
 }
 
-def targetJavaVersion = 21
+def targetJavaVersion = 25
 tasks.withType(JavaCompile).configureEach {
     // ensure that the encoding is set to UTF-8, no matter what the system default is
     // this fixes some edge cases with special characters not displaying correctly
@@ -176,3 +159,5 @@ publishing {
         }
     }
 }
+
+tasks.withType(JavaCompile).configureEach { options.compilerArgs += ['-Xmaxerrs', '1000'] }

@@ -4,7 +4,7 @@ import kim.biryeong.minigamelib.Playback;
 import kim.biryeong.minigamelib.cinematic.CameraViews;
 import net.minecraft.core.Holder;
 import net.minecraft.network.protocol.game.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.*;
 import net.minecraft.world.entity.Display;
@@ -103,7 +103,7 @@ public final class MusicService implements AutoCloseable {
         final Set<ServerPlayer> sounding = new HashSet<>();
         final Playback handle = new Playback(() -> { synchronized (MusicService.this) { finish(Playback.Status.CANCELLED); } });
         MusicTimeline timeline;
-        ResourceLocation sound;
+        Identifier sound;
         boolean broadcast;
         Channel(String id, MusicCatalog catalog, MusicCatalog.Playlist list, Collection<ServerPlayer> targets, boolean scene) {
             this.id = id; this.catalog = catalog; this.targets = new LinkedHashSet<>(targets); this.scene = scene; timeline = new MusicTimeline(list);
@@ -122,7 +122,7 @@ public final class MusicService implements AutoCloseable {
             if (next == null) { finish(Playback.Status.COMPLETED); return; }
             var track = MusicService.this.catalog().tracks().get(next);
             if (track == null) { finish(Playback.Status.FAILED); return; }
-            sound = ResourceLocation.fromNamespaceAndPath("minigamelib", "music/" + track.id());
+            sound = Identifier.fromNamespaceAndPath("minigamelib", "music/" + track.id());
             timeline.started(track.seconds(), System.nanoTime());
             for (var p : broadcast ? List.copyOf(online.values()) : List.copyOf(targets)) {
                 if (!online.containsKey(p.getUUID()) || !MusicPacks.ready(p) || (!scene && cinematic.contains(p.getUUID()))) continue;

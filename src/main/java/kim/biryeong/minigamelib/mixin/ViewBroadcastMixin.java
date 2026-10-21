@@ -16,7 +16,7 @@ public abstract class ViewBroadcastMixin {
     @Inject(method = "respawn", at = @At("HEAD"))
     private void minigamelib$beforeRespawn(net.minecraft.server.level.ServerPlayer player, boolean alive, net.minecraft.world.entity.Entity.RemovalReason reason,
             org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<net.minecraft.server.level.ServerPlayer> cir) {
-        var lib = kim.biryeong.minigamelib.MinigameLib.get(player.getServer());
+        var lib = kim.biryeong.minigamelib.MinigameLib.get(player.level().getServer());
         lib.editor().close(player); lib.cinematics().stop(player); lib.music().stop(java.util.List.of(player));
     }
 

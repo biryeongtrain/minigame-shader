@@ -1,6 +1,6 @@
 package kim.biryeong.minigamelib.displayhud;
 
-import net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents;
+import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -44,11 +44,11 @@ public final class DisplayHudManager {
         });
 
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) ->
-                runLater(newPlayer.getServer(), 3, () -> DisplayHud.reattachAll(oldPlayer, newPlayer))
+                runLater(newPlayer.level().getServer(), 3, () -> DisplayHud.reattachAll(oldPlayer, newPlayer))
         );
 
-        ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register((player, origin, destination) ->
-                runLater(player.getServer(), 3, () -> {
+        ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register((player, origin, destination) ->
+                runLater(player.level().getServer(), 3, () -> {
                     for (DisplayHud hud : DisplayHud.getHuds(player).values()) {
                         hud.respawn();
                     }
