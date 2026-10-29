@@ -12,6 +12,14 @@ layout(std140) uniform Projection {
     mat4 MinigameLibProjMat;
 };
 
+// Screen overlays must use the native matrix, never the dynamic FOV expression.
+// Keep this scalar accessor before the ProjMat macro to avoid indexing two
+// separate matrix-valued function calls on screen-space paths.
+#define MINIGAMELIB_RAW_ASPECT 1
+float minigamelib_raw_aspect() {
+    return abs(MinigameLibProjMat[1][1] / MinigameLibProjMat[0][0]);
+}
+
 mat4 minigamelib_projection() {
     mat4 projection = MinigameLibProjMat;
     if (GameTime >= 0.0 || projection[2][3] == 0.0) {

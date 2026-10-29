@@ -19,6 +19,15 @@
 #define DISPLAYHUD_DEPTH 1000000.0
 #define DISPLAYHUD_REF vec2(1920.0, 1080.0)
 
+// Screen-space layout is independent of world zoom. Do not add a uniform block.
+float displayhud_screen_aspect() {
+#ifdef MINIGAMELIB_RAW_ASPECT
+    return minigamelib_raw_aspect();
+#else
+    return abs(ProjMat[1][1] / ProjMat[0][0]);
+#endif
+}
+
 bool displayhud_is_hud(vec3 position) {
     return position.y < -1000.0;
 }
@@ -28,7 +37,7 @@ vec4 displayhud_clip(vec3 position) {
     pos.x *= -1.0;
     float offset = 0.0;
     if (position.y < -2.0 * DISPLAYHUD_GAP) {
-        float aspect = abs(ProjMat[1][1] / ProjMat[0][0]); // 화면 가로/세로 (원근 투영: [0][0] = f/aspect, [1][1] = f)
+        float aspect = displayhud_screen_aspect(); // 화면 가로/세로 (원근 투영: [0][0] = f/aspect, [1][1] = f)
         float keep = (16.0 / 9.0) / aspect;                // 16:9 영역이 차지하는 가로 비율
         if (position.y < -4.0 * DISPLAYHUD_GAP) {        // 오른쪽
             pos.y += 2.0 * DISPLAYHUD_GAP;
