@@ -57,6 +57,30 @@ public final class MusicService implements AutoCloseable {
         var channel = new Channel(id, source, list, targets, scene);
         channels.add(channel); channel.next(); return channel.handle;
     }
+    /** Play an existing pack sound without copying it into the config music directory.
+     * The caller owns the sound definition (stream:true), actual file duration and pack inclusion.
+     * Uses the same readiness, listener ownership, cinematic anchor, clock and stop path as catalog music.
+     */
+    public synchronized Playback playSound(Identifier sound, double seconds, float volume,
+                                           Collection<ServerPlayer> players, boolean scene) {
+        Objects.requireNonNull(sound);
+        if (!Double.isFinite(seconds) || seconds <= 0 || seconds > 86400
+                || !Float.isFinite(volume) || volume <= 0 || volume > 1)
+            throw new IllegalArgumentException("Invalid sound duration or volume");
+        if (closed) throw new IllegalStateException("Music service is closed");
+        var targets = List.copyOf(new LinkedHashSet<>(players));
+        if (targets.isEmpty()) throw new IllegalArgumentException("No listeners");
+        for (var p : targets) if (online.get(p.getUUID()) != p) throw new IllegalArgumentException("Listener is not connected");
+        if (!scene && targets.stream().anyMatch(p -> cinematic.contains(p.getUUID()))) throw new IllegalStateException("Cinematic music has priority");
+        stop(targets);
+        var track = new MusicCatalog.Track("external", sound.toString(), sound.toString(), seconds);
+        var source = new MusicCatalog(Map.of(track.id(), track), Map.of());
+        var channel = new Channel(sound.toString(), source,
+                new MusicCatalog.Playlist(List.of(track.id()), false), targets, scene);
+        channel.soundOverride = sound; channel.volume = volume;
+        channels.add(channel); channel.next(); return channel.handle;
+    }
+
     public synchronized Playback playGlobal(String playlist) {
         var source = catalog(); var list = source.playlists().get(playlist);
         if (list == null && source.tracks().containsKey(playlist)) list = new MusicCatalog.Playlist(List.of(playlist), false);
@@ -103,7 +127,8 @@ public final class MusicService implements AutoCloseable {
         final Set<ServerPlayer> sounding = new HashSet<>();
         final Playback handle = new Playback(() -> { synchronized (MusicService.this) { finish(Playback.Status.CANCELLED); } });
         MusicTimeline timeline;
-        Identifier sound;
+        Identifier sound, soundOverride;
+        float volume = 1f;
         boolean broadcast;
         Channel(String id, MusicCatalog catalog, MusicCatalog.Playlist list, Collection<ServerPlayer> targets, boolean scene) {
             this.id = id; this.catalog = catalog; this.targets = new LinkedHashSet<>(targets); this.scene = scene; timeline = new MusicTimeline(list);
@@ -111,7 +136,7 @@ public final class MusicService implements AutoCloseable {
         void next() {
             if (handle.done()) return;
             for (var p : List.copyOf(sounding)) { owners.remove(p.getUUID(), this); silence(p); }
-            if (catalog != MusicService.this.catalog()) {
+            if (soundOverride == null && catalog != MusicService.this.catalog()) {
                 catalog = MusicService.this.catalog();
                 var list = catalog.playlists().get(id);
                 if (list == null && catalog.tracks().containsKey(id)) list = new MusicCatalog.Playlist(List.of(id), false);
@@ -120,9 +145,10 @@ public final class MusicService implements AutoCloseable {
             }
             String next = timeline.next();
             if (next == null) { finish(Playback.Status.COMPLETED); return; }
-            var track = MusicService.this.catalog().tracks().get(next);
+            var track = catalog.tracks().get(next);
             if (track == null) { finish(Playback.Status.FAILED); return; }
-            sound = Identifier.fromNamespaceAndPath("minigamelib", "music/" + track.id());
+            sound = soundOverride != null ? soundOverride
+                    : Identifier.fromNamespaceAndPath("minigamelib", "music/" + track.id());
             timeline.started(track.seconds(), System.nanoTime());
             for (var p : broadcast ? List.copyOf(online.values()) : List.copyOf(targets)) {
                 if (!online.containsKey(p.getUUID()) || !MusicPacks.ready(p) || (!scene && cinematic.contains(p.getUUID()))) continue;
@@ -134,7 +160,7 @@ public final class MusicService implements AutoCloseable {
                 net.minecraft.world.entity.Entity anchor = p;
                 if (view != null) anchor = view.soundAnchor();
                 CameraViews.send(p, new ClientboundSoundEntityPacket(Holder.direct(SoundEvent.createVariableRangeEvent(sound)),
-                        SoundSource.MUSIC, anchor, 1, 1, ThreadLocalRandom.current().nextLong()));
+                        SoundSource.MUSIC, anchor, volume, 1, ThreadLocalRandom.current().nextLong()));
             }
         }
         void silence(ServerPlayer p) {

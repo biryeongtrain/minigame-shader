@@ -472,3 +472,14 @@ JUnit은 파싱·보간·파일 충돌·음악 길이·재생 순서·팩 적용
 1.x에 있던 Copper Golem 스모크 하네스(`runSmokeServer`)는 26.3 하네스가 없어 제거했습니다. 대신 `runClientGameTest`로 실제 클라이언트 화면을 확인합니다.
 
 실행 결과와 실제 화면·영상, 생략한 검증은 [검증 기록](docs/verification.md)에 정리했습니다.
+
+### 이미 팩에 포함된 음악 재생
+
+```java
+Playback music = MinigameLib.get(server).music().playSound(
+    Identifier.fromNamespaceAndPath("mygame", "tower_music"),
+    144.23, 0.5f, List.of(player), true);
+music.stop(); // 또는 자동 길이 종료, music.done() / completion() 확인
+```
+
+`playSound`는 기존 `sounds.json` 이벤트를 사용하며 파일을 재복사하지 않습니다. 호출자는 실제 OGG 길이와 `stream: true`, Polymer 주팩 포함을 책임집니다. MUSIC 채널·팩준비·카메라앵커·리스너 소유권·타이머·정지는 기존 MusicService와 같습니다. 마지막 인수 `scene=true`는 시네마틱 우선권으로 재생합니다. 팩 미준비 리스너는 기존 catalog API와 같이 건너뛰므로 팩이 준비된 후 호출하세요.
