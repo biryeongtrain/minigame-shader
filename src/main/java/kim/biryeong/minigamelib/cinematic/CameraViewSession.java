@@ -27,7 +27,8 @@ public final class CameraViewSession implements AutoCloseable {
     private final Set<Long> desired = new HashSet<>(), queued = new HashSet<>();
     private final Map<Integer, Entity> entities = new HashMap<>();
     private PlayerChunkSender chunks = new PlayerChunkSender(false);
-    private CameraViews.Region region;
+    private CameraViews.Region region, preloadRegion;
+    private final Set<Long> preloaded = new HashSet<>();
     private ServerLevel level;
     private Vec3 position;
     private long loadingSince;
@@ -71,6 +72,7 @@ public final class CameraViewSession implements AutoCloseable {
         boolean dimensionChange = level != nextLevel;
         if (dimensionChange) {
             CameraViews.sending(() -> holder.stopWatching(player));
+            clearPreload();
             CameraViews.release(region);
             region = null;
             desired.clear(); queued.clear(); entities.clear();
@@ -88,9 +90,11 @@ public final class CameraViewSession implements AutoCloseable {
             send(new ClientboundGameEventPacket(ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START, 0));
             environment();
         }
+        // A same-level cut into chunks the client already holds needs no loading curtain;
+        // hiding the view there only produces a black flash between shots.
+        boolean needsCurtain = dimensionChange || cut && !loaded(pos);
         if (dimensionChange || cut) {
-            ready = false;
-            loadingSince = System.nanoTime();
+            if (needsCurtain) { ready = false; loadingSince = System.nanoTime(); }
             send(new ClientboundPlayerPositionPacket(teleportId++, new PositionMoveRotation(pos, Vec3.ZERO, yaw, pitch), Set.of()));
         }
         camera.setTeleportDuration(cut ? 0 : 1);
@@ -98,11 +102,51 @@ public final class CameraViewSession implements AutoCloseable {
         effect.setOffset(Vec3.directionFromRotation(pitch,yaw).scale(2));
         CameraViews.sending(holder::tick);
         updateRegion();
+        if (cut) clearPreload();
         if (dimensionChange) CameraViews.sending(() -> holder.startWatching(player));
         if (dimensionChange || cut) {
             send(new ClientboundSetCameraPacket(soundAnchor));
-            curtain(true);
+            if (needsCurtain) curtain(true);
         }
+    }
+
+    /** Streams chunks around a future camera position so a later same-level cut needs no loading curtain. */
+    public void preload(Vec3 pos) {
+        if (closed) return;
+        var center = ChunkPos.containing(BlockPos.containing(pos));
+        var next = new CameraViews.Region(level, center, 3);
+        if (next.equals(preloadRegion)) return;
+        clearPreload();
+        CameraViews.acquire(next);
+        preloadRegion = next;
+        for (int x = center.x() - 2; x <= center.x() + 2; x++)
+            for (int z = center.z() - 2; z <= center.z() + 2; z++) {
+                long id = ChunkPos.pack(x, z);
+                if (desired.add(id)) preloaded.add(id);
+            }
+        if (region != null) send(new ClientboundSetChunkCacheRadiusPacket(cacheRadius(region.radius() - 1)));
+    }
+
+    /** The client discards chunks outside its cache radius; widen it so preloaded chunks survive. */
+    private int cacheRadius(int base) {
+        if (preloadRegion == null || region == null) return base;
+        int dx = Math.abs(preloadRegion.center().x() - region.center().x()), dz = Math.abs(preloadRegion.center().z() - region.center().z());
+        return Math.min(32, Math.max(base, Math.max(dx, dz) + 3));
+    }
+
+    private void clearPreload() {
+        if (preloadRegion == null) return;
+        CameraViews.release(preloadRegion);
+        preloadRegion = null;
+        preloaded.clear();
+    }
+
+    private boolean loaded(Vec3 pos) {
+        if (!ready || region == null) return false;
+        var center = ChunkPos.containing(BlockPos.containing(pos));
+        for (int x = center.x() - 1; x <= center.x() + 1; x++)
+            for (int z = center.z() - 1; z <= center.z() + 1; z++) if (!tracks(new ChunkPos(x, z))) return false;
+        return true;
     }
 
     private void updateRegion() {
@@ -116,12 +160,13 @@ public final class CameraViewSession implements AutoCloseable {
         Set<Long> nextChunks = new HashSet<>();
         for (int x = center.x() - radius; x <= center.x() + radius; x++)
             for (int z = center.z() - radius; z <= center.z() + radius; z++) nextChunks.add(ChunkPos.pack(x, z));
+        nextChunks.addAll(preloaded);
         for (long old : desired) if (!nextChunks.contains(old)) {
             CameraViews.sending(() -> chunks.dropChunk(player, ChunkPos.unpack(old)));
             queued.remove(old);
         }
         desired.clear(); desired.addAll(nextChunks);
-        send(new ClientboundSetChunkCacheRadiusPacket(radius));
+        send(new ClientboundSetChunkCacheRadiusPacket(cacheRadius(radius)));
         send(new ClientboundSetChunkCacheCenterPacket(center.x(), center.z()));
     }
 
@@ -210,8 +255,15 @@ public final class CameraViewSession implements AutoCloseable {
             CameraViews.sending(holder::destroy);
             if (!player.hasDisconnected()) {
                 for (int id : entities.keySet()) send(new ClientboundRemoveEntitiesPacket(id));
-                for (long id : queued) send(new ClientboundForgetLevelChunkPacket(ChunkPos.unpack(id)));
-                send(new ClientboundRespawnPacket(player.createCommonSpawnInfo(player.level()), ClientboundRespawnPacket.KEEP_ALL_DATA));
+                if (player.level() == level) {
+                    // Same level: the client already holds these chunks. A respawn would show the
+                    // vanilla "Loading terrain" screen, so only restore the real game mode.
+                    send(new ClientboundGameEventPacket(ClientboundGameEventPacket.CHANGE_GAME_MODE,
+                            player.gameMode().getId()));
+                } else {
+                    for (long id : queued) send(new ClientboundForgetLevelChunkPacket(ChunkPos.unpack(id)));
+                    send(new ClientboundRespawnPacket(player.createCommonSpawnInfo(player.level()), ClientboundRespawnPacket.KEEP_ALL_DATA));
+                }
                 send(new ClientboundSetCameraPacket(player));
                 player.level().getServer().getPlayerList().sendLevelInfo(player, player.level());
                 player.onUpdateAbilities();
@@ -225,7 +277,7 @@ public final class CameraViewSession implements AutoCloseable {
                 curtain(false);
             }
         } finally {
-            CameraViews.release(region);
+            clearPreload(); CameraViews.release(region);
             desired.clear(); queued.clear(); entities.clear();
         }
     }
