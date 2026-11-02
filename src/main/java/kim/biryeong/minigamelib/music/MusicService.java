@@ -63,6 +63,12 @@ public final class MusicService implements AutoCloseable {
      */
     public synchronized Playback playSound(Identifier sound, double seconds, float volume,
                                            Collection<ServerPlayer> players, boolean scene) {
+        return playSound(sound, seconds, volume, players, scene, SoundSource.MUSIC);
+    }
+    /** Explicit mixer category; playback and cancellation always use the same category. */
+    public synchronized Playback playSound(Identifier sound, double seconds, float volume,
+                                           Collection<ServerPlayer> players, boolean scene, SoundSource category) {
+        Objects.requireNonNull(category);
         Objects.requireNonNull(sound);
         if (!Double.isFinite(seconds) || seconds <= 0 || seconds > 86400
                 || !Float.isFinite(volume) || volume <= 0 || volume > 1)
@@ -77,7 +83,7 @@ public final class MusicService implements AutoCloseable {
         var source = new MusicCatalog(Map.of(track.id(), track), Map.of());
         var channel = new Channel(sound.toString(), source,
                 new MusicCatalog.Playlist(List.of(track.id()), false), targets, scene);
-        channel.soundOverride = sound; channel.volume = volume;
+        channel.soundOverride = sound; channel.volume = volume; channel.category = category;
         channels.add(channel); channel.next(); return channel.handle;
     }
 
@@ -129,6 +135,7 @@ public final class MusicService implements AutoCloseable {
         MusicTimeline timeline;
         Identifier sound, soundOverride;
         float volume = 1f;
+        SoundSource category = SoundSource.MUSIC;
         boolean broadcast;
         Channel(String id, MusicCatalog catalog, MusicCatalog.Playlist list, Collection<ServerPlayer> targets, boolean scene) {
             this.id = id; this.catalog = catalog; this.targets = new LinkedHashSet<>(targets); this.scene = scene; timeline = new MusicTimeline(list);
@@ -160,12 +167,12 @@ public final class MusicService implements AutoCloseable {
                 net.minecraft.world.entity.Entity anchor = p;
                 if (view != null) anchor = view.soundAnchor();
                 CameraViews.send(p, new ClientboundSoundEntityPacket(Holder.direct(SoundEvent.createVariableRangeEvent(sound)),
-                        SoundSource.MUSIC, anchor, volume, 1, ThreadLocalRandom.current().nextLong()));
+                        category, anchor, volume, 1, ThreadLocalRandom.current().nextLong()));
             }
         }
         void silence(ServerPlayer p) {
             if (sounding.remove(p) && sound != null)
-                CameraViews.send(p, new ClientboundStopSoundPacket(sound, SoundSource.MUSIC));
+                CameraViews.send(p, new ClientboundStopSoundPacket(sound, category));
         }
         void finish(Playback.Status status) {
             for (var p : List.copyOf(sounding)) { owners.remove(p.getUUID(), this); silence(p); }
