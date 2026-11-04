@@ -505,11 +505,16 @@ public abstract class DisplayHud {
 
     /** Raw transformation. Bypasses the HUD location/scale helpers. */
     public void setTransformation(Transformation transformation) {
+        setTransformation(transformation, 0);
+    }
+
+    /** Raw transformation interpolated over {@code time} client ticks. */
+    public void setTransformation(Transformation transformation, int time) {
         translation.set(transformation.translation());
         leftRotation.set(transformation.leftRotation());
         scaleVector.set(transformation.scale());
         rightRotation.set(transformation.rightRotation());
-        applyTransformation(0);
+        applyTransformation(time);
     }
 
     public void setAlignment(HudAlignment alignment) {
