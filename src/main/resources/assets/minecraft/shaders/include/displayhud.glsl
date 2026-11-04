@@ -65,7 +65,30 @@ vec4 displayhud_clip(vec3 position) {
 // 보통 HUD 깊이는 0.5 근처(location.z 1 당 5e-5). location.z -900 ~ 900 이 구간 안에서 순서가 지켜진다.
 #define DISPLAYHUD_ABOVE_HAND_LIGHT ivec2(16, 32)
 
+// ── 포인터 (DisplayHud.setPointer) ──
+// 밝기 block 2 / sky 2 인 손 위 HUD. 틴트 RGB 에 서버 위치가 계산된 시점의 yaw(12bit)·pitch(12bit) 가 들어 있다.
+// 매 프레임 실제 시선 회전(ModelViewMat)과의 차이 * 15px/도 만큼 옮겨, 서버 갱신 사이에도 마우스를 바로 따라간다.
+#define DISPLAYHUD_POINTER_LIGHT ivec2(32, 32)
+#define DISPLAYHUD_POINTER_PX 15.0
+
+bool displayhud_is_pointer(ivec2 light) {
+    return light == DISPLAYHUD_POINTER_LIGHT;
+}
+
+vec3 displayhud_pointer(vec3 position, vec4 color, mat3 view) {
+    ivec3 c = ivec3(round(color.rgb * 255.0));
+    float refYaw = float((c.r << 4) | (c.g >> 4)) / 4096.0 * 360.0;
+    float refPitch = float(((c.g & 15) << 8) | c.b) / 4095.0 * 180.0 - 90.0;
+    vec3 f = -vec3(view[0][2], view[1][2], view[2][2]);           // 월드 기준 시선 방향
+    float yaw = degrees(atan(-f.x, f.z));
+    float pitch = degrees(asin(clamp(-f.y, -1.0, 1.0)));
+    float dYaw = mod(yaw - refYaw + 540.0, 360.0) - 180.0;
+    vec2 d = clamp(vec2(dYaw, pitch - refPitch) * DISPLAYHUD_POINTER_PX, vec2(-240.0), vec2(240.0));
+    return position - vec3(d.x * DISPLAYHUD_X, d.y * DISPLAYHUD_Y, 0.0);
+}
+
 float displayhud_above_hand_depth(float z, ivec2 light) {
+    if (displayhud_is_pointer(light)) light = DISPLAYHUD_ABOVE_HAND_LIGHT;
     if (light != DISPLAYHUD_ABOVE_HAND_LIGHT) {
         return z;
     }

@@ -34,6 +34,12 @@ public abstract class DisplayHud {
      */
     public static final int ABOVE_HAND_BLOCK_LIGHT = 1;
     public static final int ABOVE_HAND_SKY_LIGHT = 2;
+    /**
+     * Pointer marker brightness (block 2 / sky 2): an above-hand HUD whose tint encodes the view rotation its server
+     * position belongs to. Must match {@code DISPLAYHUD_POINTER_LIGHT}; the shader moves it with the live view
+     * rotation every frame (see {@link #pointerTint}).
+     */
+    public static final int POINTER_BLOCK_LIGHT = 2;
     /** Legacy above-hand glow colour. The above-hand trigger glows with it and the pack never outlines it. */
     public static final int ABOVE_HAND_GLOW_COLOR = 0x01FEFD;
 
@@ -101,6 +107,7 @@ public abstract class DisplayHud {
     boolean aboveHandTrigger;
 
     protected boolean aboveHand;
+    protected boolean pointer;
     protected int brightnessBlock = 15;
     protected int brightnessSky = 15;
 
@@ -577,7 +584,7 @@ public abstract class DisplayHud {
 
     private void applyBrightness() {
         display.setBrightnessOverride(aboveHand
-                ? new Brightness(ABOVE_HAND_BLOCK_LIGHT, ABOVE_HAND_SKY_LIGHT)
+                ? new Brightness(pointer ? POINTER_BLOCK_LIGHT : ABOVE_HAND_BLOCK_LIGHT, ABOVE_HAND_SKY_LIGHT)
                 : new Brightness(brightnessBlock, brightnessSky));
     }
 
@@ -586,6 +593,25 @@ public abstract class DisplayHud {
      * {@code entity_outline} post effect shipped in minigame-lib's pack. A transparent trigger display is attached
      * automatically to every viewer that sees at least one above-hand HUD.
      */
+    /**
+     * Marks this above-hand HUD as a view-driven pointer. Its tint must be {@link #pointerTint} of the view rotation
+     * the current location was computed for; the client adds (live rotation - that rotation) * {@code pixelsPerDegree}
+     * (15, matching the shader) so the pointer follows the mouse at frame rate between server updates.
+     */
+    public void setPointer(boolean pointer) {
+        if (this.pointer == pointer) return;
+        this.pointer = pointer;
+        applyBrightness();
+        changed();
+    }
+
+    /** 12-bit yaw (0..360) and 12-bit pitch (-90..90) packed into an RGB tint for {@link #setPointer}. */
+    public static int pointerTint(float yaw, float pitch) {
+        int y = Math.round((((yaw % 360) + 360) % 360) / 360f * 4096) & 4095;
+        int p = Math.round((Math.clamp(pitch, -90f, 90f) + 90f) / 180f * 4095);
+        return y << 12 | p;
+    }
+
     public void setAboveHand(boolean aboveHand) {
         if (aboveHandTrigger || this.aboveHand == aboveHand) return;
         this.aboveHand = aboveHand;

@@ -85,16 +85,16 @@ void main() {
 
     // DisplayHud: 아주 아래(y < -1000)에 놓인 꼭짓점은 화면 고정 HUD 로 옮긴다
     if (displayhud_is_hud(Position)) {
-        gl_Position = displayhud_clip(Position);
+        gl_Position = displayhud_clip(displayhud_is_pointer(UV2) ? displayhud_pointer(Position, Color, mat3(ModelViewMat)) : Position);
 #if !defined(EMISSIVE) && !defined(OIT)
         // DisplayHud 2.2: 손 위 표시 표식(밝기 block 1 / sky 2)이면 손보다 위로 올릴 전용 깊이 구간에 그린다
         gl_Position.z = displayhud_above_hand_depth(gl_Position.z, UV2);
 #endif
 #ifdef PER_FACE_LIGHTING
-        vertexPerFaceColorBack = Color;
-        vertexPerFaceColorFront = Color;
+        vertexPerFaceColorBack = displayhud_is_pointer(UV2) ? vec4(1.0, 1.0, 1.0, Color.a) : Color;
+        vertexPerFaceColorFront = vertexPerFaceColorBack;
 #else
-        vertexColor = Color;
+        vertexColor = displayhud_is_pointer(UV2) ? vec4(1.0, 1.0, 1.0, Color.a) : Color;
 #endif
 #ifndef EMISSIVE
         lightMapColor = vec4(1.0);
