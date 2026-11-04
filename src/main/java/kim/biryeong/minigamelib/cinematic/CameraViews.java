@@ -37,7 +37,9 @@ public final class CameraViews {
     private static final Map<UUID, CameraViewSession> VIEWS = new ConcurrentHashMap<>();
     private static final ThreadLocal<Integer> SENDING = ThreadLocal.withInitial(() -> 0);
     private static final Map<Region, Integer> TICKETS = new HashMap<>();
-    private static final Map<UUID, ArrayDeque<net.minecraft.server.network.PlayerChunkSender>> BATCHES = new HashMap<>();
+    // Keyed by the connection's player instance: a reconnect with the same UUID must never share or clear another
+    // connection's batch bookkeeping. One lost acknowledgement freezes the vanilla chunk sender permanently.
+    private static final Map<ServerPlayer, ArrayDeque<net.minecraft.server.network.PlayerChunkSender>> BATCHES = new IdentityHashMap<>();
     private static final TicketType CAMERA_TICKET = new TicketType(0L, TicketType.FLAG_LOADING);
     // Only connection, UI and account state may bypass the cinematic world's packet route.
     private static final Set<String> ALLOWED = Set.of("keep_alive", "ping", "disconnect", "custom_payload",
@@ -57,6 +59,7 @@ public final class CameraViews {
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             for (var view : List.copyOf(VIEWS.values())) {
                 if (view.player().level().getServer() != server) continue;
+                if (view.player().hasDisconnected()) { view.close(); continue; }
                 try { view.tick(); }
                 catch (Exception e) {
                     org.slf4j.LoggerFactory.getLogger("minigamelib").error("Camera view failed", e);
@@ -64,7 +67,7 @@ public final class CameraViews {
                 }
             }
         });
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> { stop(handler.player); BATCHES.remove(handler.player.getUUID()); });
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> { stop(handler.player); BATCHES.remove(handler.player); });
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> List.copyOf(VIEWS.values()).stream()
                 .filter(v -> v.player().level().getServer() == server).forEach(CameraViewSession::close));
         ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> !(entity instanceof ServerPlayer p) || get(p) == null);
@@ -79,20 +82,35 @@ public final class CameraViews {
                         .then(literal("stop").executes(c -> { stop(c.getSource().getPlayerOrException()); return 1; })))));
     }
 
-    public static CameraViewSession get(ServerPlayer player) { return VIEWS.get(player.getUUID()); }
+    /** Only the view owned by this exact connection; a stale view left by an earlier login must not filter a new one. */
+    public static CameraViewSession get(ServerPlayer player) {
+        var view = VIEWS.get(player.getUUID());
+        return view != null && view.player() == player ? view : null;
+    }
     public static Collection<CameraViewSession> all() { return List.copyOf(VIEWS.values()); }
     public static boolean sending() { return SENDING.get() != 0; }
     public static void batchSent(ServerPlayer player) {
         var view = get(player);
         var sender = sending() && view != null ? view.chunks() : player.connection.chunkSender;
-        BATCHES.computeIfAbsent(player.getUUID(), id -> new ArrayDeque<>()).add(sender);
+        BATCHES.computeIfAbsent(player, id -> new ArrayDeque<>()).add(sender);
     }
     public static void batchReceived(ServerPlayer player, float rate) {
-        var batches = BATCHES.get(player.getUUID());
-        var sender = batches == null ? null : batches.poll();
-        if (batches != null && batches.isEmpty()) BATCHES.remove(player.getUUID());
-        if (sender != null && ((kim.biryeong.minigamelib.mixin.ChunkSenderAccessor)sender).minigamelib$unacknowledged() > 0)
-            sender.onChunkBatchReceivedByClient(Float.isFinite(rate) ? rate : 0.01f);
+        if (player.hasDisconnected()) return;
+        float desired = Float.isFinite(rate) ? rate : 0.01f;
+        var batches = BATCHES.get(player);
+        net.minecraft.server.network.PlayerChunkSender sender = null;
+        // Skip records whose sender no longer waits (closed view, already reset tracking).
+        while (batches != null && !batches.isEmpty()) {
+            var next = batches.poll();
+            if (unacknowledged(next) > 0) { sender = next; break; }
+        }
+        if (batches != null && batches.isEmpty()) BATCHES.remove(player);
+        // An acknowledgement with no matching record still belongs to this client: never drop it.
+        if (sender == null && unacknowledged(player.connection.chunkSender) > 0) sender = player.connection.chunkSender;
+        if (sender != null) sender.onChunkBatchReceivedByClient(desired);
+    }
+    private static int unacknowledged(net.minecraft.server.network.PlayerChunkSender sender) {
+        return ((kim.biryeong.minigamelib.mixin.ChunkSenderAccessor) sender).minigamelib$unacknowledged();
     }
     public static void sending(Runnable action) {
         SENDING.set(SENDING.get() + 1);
@@ -115,6 +133,8 @@ public final class CameraViews {
                 || !Float.isFinite(yaw) || !Float.isFinite(pitch) || !level.getWorldBorder().isWithinBounds(pos))
             throw new IllegalArgumentException("Invalid camera position or rotation");
         stop(player);
+        var stale = VIEWS.get(player.getUUID());
+        if (stale != null) stale.close(); // left by an earlier connection of the same account
         player.closeContainer();
         var view = new CameraViewSession(player);
         VIEWS.put(player.getUUID(), view);
