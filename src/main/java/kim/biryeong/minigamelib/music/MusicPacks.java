@@ -18,7 +18,9 @@ public final class MusicPacks {
     private static final Map<UUID, PackReadiness> LISTENERS = new ConcurrentHashMap<>();
     private static volatile Published published = new Published(MusicCatalog.empty(), "");
     private MusicPacks() {}
+    private static volatile Path musicDirectory;
     public static void init(Path directory) {
+        musicDirectory = directory;
         PolymerResourcePackUtils.RESOURCE_PACK_CREATION_EVENT.register(builder -> {
             try {
                 var scan = MusicCatalog.scan(directory, s -> org.slf4j.LoggerFactory.getLogger("minigamelib").warn("Music: {}", s));
@@ -29,6 +31,17 @@ public final class MusicPacks {
         });
     }
     public static Published published() { return published; }
+    /**
+     * A reused pack skips the build, so {@link #finish} never publishes it: without this {@link #ready} stays false for
+     * everyone (no music, and activities that wait on pack readiness never start). The catalog is rescanned from the same
+     * directory the cached pack was keyed on.
+     */
+    public static void restore(String sha1) throws java.io.IOException {
+        var directory = musicDirectory;
+        if (directory == null || sha1 == null || sha1.isEmpty()) return;
+        var scan = MusicCatalog.scan(directory, s -> org.slf4j.LoggerFactory.getLogger("minigamelib").warn("Music: {}", s));
+        published = new Published(scan.catalog(), sha1.toLowerCase(java.util.Locale.ROOT));
+    }
     public static void begin() { BUILD.set(null); }
     public static void finish(Path output, boolean success) {
         var candidate = BUILD.getAndSet(null);
