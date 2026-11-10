@@ -88,6 +88,13 @@ public final class CameraViews {
         return view != null && view.player() == player ? view : null;
     }
     public static Collection<CameraViewSession> all() { return List.copyOf(VIEWS.values()); }
+    /** Effective native send radius in the target level, including per-world caps and the client's request. */
+    public static int viewDistance(ServerPlayer player, ServerLevel level) {
+        int serverRadius = ((kim.biryeong.minigamelib.mixin.ChunkMapViewDistanceAccessor)
+                level.getChunkSource().chunkMap).minigamelib$serverViewDistance();
+        // ChunkMap.setServerViewDistance bounds its field to 2..32; match getPlayerViewDistance's minimum.
+        return Math.max(2, Math.min(player.requestedViewDistance(), serverRadius));
+    }
     public static boolean sending() { return SENDING.get() != 0; }
     public static void batchSent(ServerPlayer player) {
         var view = get(player);

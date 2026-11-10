@@ -10,6 +10,7 @@
     "ViewEntityMixin",
     "ViewChunkSenderMixin",
     "ChunkMapAccessor",
+    "ChunkMapViewDistanceAccessor",
     "EntityDataAccessor",
     "ViewChunkUpdatesMixin",
     "ViewWorldEventsMixin",

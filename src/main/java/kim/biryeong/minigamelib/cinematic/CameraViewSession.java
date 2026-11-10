@@ -150,7 +150,7 @@ public final class CameraViewSession implements AutoCloseable {
     }
 
     private void updateRegion() {
-        int radius = Math.max(2, Math.min(player.requestedViewDistance(), player.level().getServer().getPlayerList().getViewDistance()));
+        int radius = CameraViews.viewDistance(player, level);
         var center = ChunkPos.containing(BlockPos.containing(position));
         var next = new CameraViews.Region(level, center, radius + 1);
         if (next.equals(region)) return;
@@ -284,7 +284,7 @@ public final class CameraViewSession implements AutoCloseable {
 
     private void restoreEntities() {
         var world = player.level();
-        double radius = Math.min(player.requestedViewDistance(), player.level().getServer().getPlayerList().getViewDistance()) * 16.0;
+        double radius = CameraViews.viewDistance(player, world) * 16.0;
         var body = player.position();
         for (var entity : world.getEntities((Entity)null, new AABB(body.x-radius,world.getMinY(),body.z-radius,body.x+radius,world.getMaxY(),body.z+radius),
                 e -> e != player && !e.isRemoved() && e.broadcastToPlayer(player))) {
