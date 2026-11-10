@@ -158,6 +158,11 @@ publishing {
             name = "qf-repo"
             url = "https://repo.biryeong.kim/releases/"
         }
+        // 로컬 스테이징 폴더: publishAllPublicationsToStagingRepository 후 rclone으로 R2에 동기화
+        maven {
+            name = "staging"
+            url = layout.buildDirectory.dir("staging-repo")
+        }
     }
 }
 
