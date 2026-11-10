@@ -45,7 +45,7 @@ https://github.com/biryeongtrain/RGBMapUtils
 
 ## 설치와 이전
 
-Fabric Loader 0.20.1+, Fabric API 0.164.0+26.3, Polymer 0.18.4+26.3을 서버에 설치하고 `minigame-lib-2.0.0+26.3.jar`를 추가합니다. Maven 좌표는 `kim.biryeong:minigame-lib:2.0.0+26.3`입니다. 클라이언트는 바닐라 26.3(OpenGL/Vulkan)이며 Polymer 리소스팩만 받으면 됩니다. 이 작업에서는 Maven 저장소에 게시하지 않습니다.
+Fabric Loader 0.20.1+, Fabric API 0.164.0+26.3, Polymer 0.18.4+26.3을 서버에 설치하고 `minigame-lib-2.1.0+26.3.jar`를 추가합니다. Maven 좌표는 `kim.biryeong:minigame-lib:2.1.0+26.3`입니다. 클라이언트는 바닐라 26.3(OpenGL/Vulkan)이며 Polymer 리소스팩만 받으면 됩니다.
 
 기존 Java import의 `kim.biryeong.dantashader`를 `kim.biryeong.minigamelib`로, 리소스 ID의 `dantashader:`를 `minigamelib:`로 변경하세요. 모드 ID는 `minigamelib`입니다. 기존 `shaderfx.json`은 새 `config/minigame-lib/shaderfx.json`이 없을 때 가져옵니다. 원본은 남겨 둡니다.
 
