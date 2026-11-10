@@ -167,3 +167,5 @@ publishing {
 }
 
 tasks.withType(JavaCompile).configureEach { options.compilerArgs += ['-Xmaxerrs', '1000'] }
+
+apply from: 'gradle/publish-r2.gradle'

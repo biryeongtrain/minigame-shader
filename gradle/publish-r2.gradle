@@ -1,0 +1,89 @@
+// 원클릭 Maven 게시: ./gradlew publishToR2
+//   build(테스트 포함) → 로컬 staging 저장소에 게시 → rclone으로 R2 업로드 → 공개 URL 검증
+// 이미 R2에 있는 버전은 덮어쓰지 않고 실패한다(버전은 불변). 새 버전 번호를 쓰거나 -PforceUpload 로 명시적으로 덮어쓴다.
+//
+// 옵션(-P):  r2Remote=r2  r2Bucket=maven  r2Path=releases  publicBase=https://repo.biryeong.kim
+//           dryRun=true      업로드 없이 staging 까지만 수행하고 올라갈 파일을 출력
+//           skipBuild=true   build(테스트) 생략. 이미 검증된 경우에만
+//           forceUpload=true 이미 존재하는 버전을 덮어씀(권장하지 않음)
+// 전제: rclone 에 R2 remote 가 설정되어 있어야 한다. 키는 rclone 설정에만 두고 이 저장소에 넣지 않는다.
+
+def r2 = { String key, String fallback -> project.findProperty(key)?.toString() ?: fallback }
+def r2Remote = r2('r2Remote', 'r2')
+def r2Bucket = r2('r2Bucket', 'maven')
+def r2Path = r2('r2Path', 'releases')
+def publicBase = r2('publicBase', 'https://repo.biryeong.kim')
+def flag = { String key -> project.findProperty(key)?.toString()?.equalsIgnoreCase('true') }
+
+def stagingDir = layout.buildDirectory.dir('staging-repo')
+def remoteRoot = "${r2Remote}:${r2Bucket}/${r2Path}".toString()
+
+def run = { List<String> cmd, boolean allowFail = false ->
+    def p = new ProcessBuilder(cmd.collect { it.toString() }).redirectErrorStream(true).start()
+    def out = p.inputStream.getText('UTF-8')
+    int code = p.waitFor()
+    if (code != 0 && !allowFail) throw new GradleException("명령 실패(${code}): ${cmd.join(' ')}\n${out}")
+    return [code: code, out: out]
+}
+
+tasks.register('r2Stage') {
+    group = 'publishing'
+    description = '로컬 staging 저장소를 비우고, R2의 maven-metadata 를 받아 온 뒤 새 버전을 게시한다.'
+    if (!flag('skipBuild')) dependsOn 'build'
+    doLast {
+        def dir = stagingDir.get().asFile
+        project.delete(dir)
+        dir.mkdirs()
+        if (run(['rclone', 'version'], true).code != 0) throw new GradleException('rclone 이 설치되어 있지 않습니다 (brew install rclone).')
+        // 기존 메타데이터를 먼저 가져와 게시가 버전 목록을 덮어쓰지 않고 병합하게 한다.
+        def pull = run(['rclone', 'copy', remoteRoot, dir.absolutePath, '--include', 'maven-metadata.xml*', '--s3-no-check-bucket'], true)
+        if (pull.code != 0) throw new GradleException("R2 접근 실패 (${remoteRoot}). rclone 설정을 확인하세요.\n${pull.out}")
+    }
+}
+tasks.matching { it.name == 'publishAllPublicationsToStagingRepository' }.configureEach {
+    mustRunAfter 'r2Stage'
+}
+
+tasks.register('publishToR2') {
+    group = 'publishing'
+    description = "빌드 후 Maven 아티팩트를 ${remoteRoot} 에 업로드하고 ${publicBase}/${r2Path}/ 에서 확인한다."
+    dependsOn 'r2Stage', 'publishAllPublicationsToStagingRepository'
+    doLast {
+        def dir = stagingDir.get().asFile
+        def group = project.group.toString().replace('.', '/')
+        def artifact = project.archives_base_name.toString()
+        def version = project.version.toString()
+        def versionPath = "${group}/${artifact}/${version}".toString()
+        def local = new File(dir, versionPath)
+        if (!local.isDirectory() || local.list().length == 0) throw new GradleException("게시 결과가 없습니다: ${local}")
+
+        def existing = run(['rclone', 'lsf', "${remoteRoot}/${versionPath}", '--s3-no-check-bucket'], true)
+        boolean published = existing.code == 0 && existing.out.trim()
+        if (published && !flag('forceUpload')) {
+            def msg = "이미 게시된 버전입니다: ${artifact}:${version}. 새 버전 번호로 올리세요 (gradle.properties 의 mod_version)."
+            if (!flag('dryRun')) throw new GradleException(msg)
+            println "경고: ${msg}"
+        }
+
+        println "업로드 대상 (${local.list().length}개): ${versionPath}"
+        local.list().sort().each { println "  ${it}" }
+        if (flag('dryRun')) { println "dryRun: 업로드하지 않았습니다. staging = ${dir}"; return }
+
+        // copy 는 R2 의 다른 파일을 지우지 않는다.
+        run(['rclone', 'copy', dir.absolutePath, remoteRoot, '--s3-no-check-bucket'])
+
+        // 공개 URL 검증: 인코딩된 + 를 포함해 실제로 내려받아 본다.
+        def base = "${publicBase}/${r2Path}/${versionPath}".replace('+', '%2B')
+        def client = java.net.http.HttpClient.newHttpClient()
+        def failures = []
+        ["${artifact}-${version}.pom", "${artifact}-${version}.jar"].each { name ->
+            def url = "${base}/${name.replace('+', '%2B')}"
+            def res = client.send(java.net.http.HttpRequest.newBuilder(URI.create(url)).method('HEAD',
+                    java.net.http.HttpRequest.BodyPublishers.noBody()).build(), java.net.http.HttpResponse.BodyHandlers.discarding())
+            println "  ${res.statusCode()} ${url}"
+            if (res.statusCode() != 200) failures << url
+        }
+        if (failures) throw new GradleException("업로드는 했지만 공개 URL 확인에 실패했습니다:\n${failures.join('\n')}")
+        println "게시 완료: ${project.group}:${artifact}:${version}"
+    }
+}
