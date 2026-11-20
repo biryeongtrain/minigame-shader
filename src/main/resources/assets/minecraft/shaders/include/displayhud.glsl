@@ -19,15 +19,6 @@
 #define DISPLAYHUD_DEPTH 1000000.0
 #define DISPLAYHUD_REF vec2(1920.0, 1080.0)
 
-// Screen-space layout is independent of world zoom. Do not add a uniform block.
-float displayhud_screen_aspect() {
-#ifdef MINIGAMELIB_RAW_ASPECT
-    return minigamelib_raw_aspect();
-#else
-    return abs(ProjMat[1][1] / ProjMat[0][0]);
-#endif
-}
-
 bool displayhud_is_hud(vec3 position) {
     return position.y < -1000.0;
 }
@@ -37,7 +28,7 @@ vec4 displayhud_clip(vec3 position) {
     pos.x *= -1.0;
     float offset = 0.0;
     if (position.y < -2.0 * DISPLAYHUD_GAP) {
-        float aspect = displayhud_screen_aspect(); // 화면 가로/세로 (원근 투영: [0][0] = f/aspect, [1][1] = f)
+        float aspect = abs(ProjMat[1][1] / ProjMat[0][0]); // 화면 가로/세로 (원근 투영: [0][0] = f/aspect, [1][1] = f)
         float keep = (16.0 / 9.0) / aspect;                // 16:9 영역이 차지하는 가로 비율
         if (position.y < -4.0 * DISPLAYHUD_GAP) {        // 오른쪽
             pos.y += 2.0 * DISPLAYHUD_GAP;
@@ -65,7 +56,7 @@ vec4 displayhud_clip(vec3 position) {
 // 보통 HUD 깊이는 0.5 근처(location.z 1 당 5e-5). location.z -900 ~ 900 이 구간 안에서 순서가 지켜진다.
 #define DISPLAYHUD_ABOVE_HAND_LIGHT ivec2(16, 32)
 
-// ── 포인터 (DisplayHud.setPointer) ──
+// ── 포인터 (DisplayHud.setPointer, minigame-lib 추가) ──
 // 밝기 block 2 / sky 2 인 손 위 HUD. 틴트 RGB 에 서버 위치가 계산된 시점의 yaw(12bit)·pitch(12bit) 가 들어 있다.
 // 매 프레임 실제 시선 회전(ModelViewMat)과의 차이 * 15px/도 만큼 옮겨, 서버 갱신 사이에도 마우스를 바로 따라간다.
 #define DISPLAYHUD_POINTER_LIGHT ivec2(32, 32)
