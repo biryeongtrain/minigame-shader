@@ -5,12 +5,12 @@
 // Generated at pack build time by ShaderFX RPHandler (imports and effect cases are inserted below).
 
 #if !defined(IS_GUI) && !defined(IS_SEE_THROUGH)
-#include <minecraft:fog.glsl>
+#moj_import <minecraft:fog.glsl>
 #endif
 
-#include <minecraft:globals.glsl>
-#include <minecraft:dynamictransforms.glsl>
-#include <minecraft:oit.glsl>
+#moj_import <minecraft:globals.glsl>
+#moj_import <minecraft:dynamictransforms.glsl>
+#moj_import <minecraft:oit.glsl>
 
 uniform sampler2D Sampler0;
 
@@ -33,7 +33,7 @@ layout(location = 0) out vec4 fragColor;
 
 //%IMPORTS%
 
-#include <minecraft:minigamelib_rgbmap.glsl>
+#moj_import <minecraft:minigamelib_rgbmap.glsl>
 
 vec4 calculateFinalColor(vec4 color) {
 #ifdef OIT_ACCUMULATE

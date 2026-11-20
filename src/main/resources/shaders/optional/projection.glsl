@@ -6,7 +6,7 @@
 // Opt-in only (config/minigame-lib/shaderfx.json: "dynamic-fov-shader": true) because it adds the Globals
 // block to every shader that uses the projection matrix.
 
-#include <minecraft:globals.glsl>
+#moj_import <minecraft:globals.glsl>
 
 layout(std140) uniform Projection {
     mat4 MinigameLibProjMat;

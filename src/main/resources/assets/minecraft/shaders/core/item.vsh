@@ -1,11 +1,11 @@
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
-#include <minecraft:light.glsl>
-#include <minecraft:fog.glsl>
-#include <minecraft:dynamictransforms.glsl>
-#include <minecraft:projection.glsl>
-#include <minecraft:sample_lightmap.glsl>
+#moj_import <minecraft:light.glsl>
+#moj_import <minecraft:fog.glsl>
+#moj_import <minecraft:dynamictransforms.glsl>
+#moj_import <minecraft:projection.glsl>
+#moj_import <minecraft:sample_lightmap.glsl>
 
 layout(location = 0) in vec3 Position;
 layout(location = 1) in vec4 Color;
@@ -35,7 +35,7 @@ layout(location = 5) out vec2 texCoord0;
 layout(location = 6) out vec2 texCoordGlint;
 #endif
 
-#include <minecraft:displayhud.glsl> // DisplayHud
+#moj_import <minecraft:displayhud.glsl> // DisplayHud
 
 void main() {
     gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);

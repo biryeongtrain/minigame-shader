@@ -4,12 +4,12 @@
 // minigame-lib (26.3): vanilla core/text.vsh + DisplayHud 2.2 + ShaderFX markers.
 
 #if !defined(IS_GUI) && !defined(IS_SEE_THROUGH)
-#include <minecraft:fog.glsl>
-#include <minecraft:sample_lightmap.glsl>
+#moj_import <minecraft:fog.glsl>
+#moj_import <minecraft:sample_lightmap.glsl>
 #endif
 
-#include <minecraft:dynamictransforms.glsl>
-#include <minecraft:projection.glsl>
+#moj_import <minecraft:dynamictransforms.glsl>
+#moj_import <minecraft:projection.glsl>
 
 layout(location = 0) in vec3 Position;
 layout(location = 1) in vec4 Color;
@@ -35,7 +35,7 @@ layout(location = 5) flat out int frames;
 layout(location = 6) flat out int fps;
 layout(location = 7) flat out float frameheight;
 
-#include <minecraft:displayhud.glsl> // DisplayHud
+#moj_import <minecraft:displayhud.glsl> // DisplayHud
 
 const vec2[4] corners = vec2[4](vec2(0), vec2(0, 1), vec2(1), vec2(1, 0));
 
