@@ -78,7 +78,7 @@ public class RPHandler {
             String fragmentShader = FileUtil.loadCore("text.fsh");
             StringBuilder importList = new StringBuilder();
             for (Identifier location : ShaderEffects.IMPORTS) {
-                importList.append(String.format("#moj_import <%s>\n", location));
+                importList.append(String.format("#include <%s>\n", location));
             }
             fragmentShader = fragmentShader.replace("//%IMPORTS%", importList);
 
