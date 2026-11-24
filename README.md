@@ -45,11 +45,11 @@ https://github.com/biryeongtrain/RGBMapUtils
 
 ## 설치와 이전
 
-Fabric Loader 0.20.1+, Fabric API 0.164.0+26.3, Polymer 0.18.4+26.3을 서버에 설치하고 `minigame-lib-2.3.1+26.3.jar`를 추가합니다. Maven 좌표는 `kim.biryeong:minigame-lib:2.3.1+26.3`입니다.
+Fabric Loader 0.20.1+, Fabric API 0.164.0+26.3, Polymer 0.18.4+26.3을 서버에 설치하고 `minigame-lib-2.4.1+26.3.jar`를 추가합니다. Maven 좌표는 `kim.biryeong:minigame-lib:2.4.1+26.3`입니다.
 
 ```groovy
 repositories { maven { url "https://repo.biryeong.kim/releases/" } }
-dependencies { implementation include("kim.biryeong:minigame-lib:2.3.1+26.3") }
+dependencies { implementation include("kim.biryeong:minigame-lib:2.4.1+26.3") }
 ```
 
 새 버전은 `gradle.properties`의 `mod_version`을 올린 뒤 `./gradlew publishToR2`로 게시합니다(빌드·테스트, R2 업로드, 공개 URL 확인까지 수행하며 rclone `r2` remote 설정이 필요합니다. 이미 게시된 버전은 덮어쓰지 않습니다). 클라이언트는 바닐라 26.3(OpenGL/Vulkan)이며 Polymer 리소스팩만 받으면 됩니다.
@@ -60,7 +60,7 @@ dependencies { implementation include("kim.biryeong:minigame-lib:2.3.1+26.3") }
 
 ## 시네마틱과 편집
 
-[시작과 조작](#editor-start) · [왼쪽 메뉴](#editor-navigation) · [목록과 저장](#editor-browser) · [입력 창](#editor-dialogs) · [공통 타임라인](#editor-timeline) · [Camera](#editor-camera) · [Entity](#editor-entity) · [Scenes와 큐](#editor-scenes) · [처음부터 만들기](#editor-tutorial) · [저장과 문제 해결](#editor-storage)
+[시작과 조작](#editor-start) · [왼쪽 메뉴](#editor-navigation) · [목록과 저장](#editor-browser) · [입력 창](#editor-dialogs) · [공통 타임라인](#editor-timeline) · [Camera](#editor-camera) · [Entity](#editor-entity) · [Scenes와 큐](#editor-scenes) · [대화](#editor-dialogue) · [처음부터 만들기](#editor-tutorial) · [저장과 문제 해결](#editor-storage)
 
 ![시네마틱 편집기의 전체 배치](docs/images/cinematic-editor/overview.png)
 
@@ -167,6 +167,7 @@ SHOW는 현재 편집자가 있는 차원의 경로만 표시합니다. 다른 �
 | **아이템 ID** (`item`) | Entity | `item_display`에 표시할 아이템입니다. 예: `minecraft:diamond_sword`. 비우면 `minecraft:stone`입니다. 다른 종류에는 적용하지 않습니다. |
 | **블록 ID** (`block`) | Entity | `block_display`에 표시할 기본 상태의 블록입니다. 예: `minecraft:gold_block`. 비우면 `minecraft:stone`입니다. 블록 상태나 NBT 명령 문법을 넣는 칸은 아닙니다. |
 | **표시할 글** (`text`) | Entity | `text_display`의 일반 문자열입니다. 비우면 트랙 이름을 사용합니다. JSON 컴포넌트나 MiniMessage를 해석하지 않습니다. |
+| **스킨 플레이어 이름** (`profile`) | Entity | `type`이 `minecraft:mannequin`일 때 입힐 플레이어 스킨입니다. 이름 또는 UUID. 서버가 Mojang API로 한 번 조회해 캐시하며, 조회가 끝나기 전에는 클라이언트가 직접 스킨을 받습니다. 다른 종류에는 지정할 수 없습니다. |
 
 #### COPY: 복제
 
@@ -303,7 +304,7 @@ Entity의 단독 PLAY는 클릭할 때의 편집자 시점을 고정한 카메�
 | 입력 항목 | 의미와 입력법 |
 | --- | --- |
 | **시간 (틱)** (`tick`) | 씬 전체에서 실행할 시점입니다. 0 이상, 씬 길이 미만입니다. |
-| **type** | `MUSIC`, `STOP_MUSIC`, `TRANSITION`, `EFFECT` 중 하나를 **텍스트로 입력**합니다. |
+| **type** | `MUSIC`, `STOP_MUSIC`, `TRANSITION`, `EFFECT`, `LETTERBOX` 중 하나를 **텍스트로 입력**합니다. |
 | **id** | 음악·플레이리스트 또는 화면 효과 ID입니다. 아래 종류별 표를 참고하세요. |
 | **길이 (틱)** (`duration`) | TRANSITION·EFFECT가 보이는 기간입니다. 눈에 보이게 하려면 1 이상으로 지정합니다. 음악 시작·정지에서는 재생 시간을 제한하지 않습니다. |
 | **색상 (RGB 16진수)** (`color`) | 화면 효과의 RGB 색상입니다. `000000`은 검정, `ffffff`는 흰색, `ff0000`은 빨강입니다. `#`나 `0x`를 붙이지 않습니다. 음악에서도 창에는 나오지만 소리에 영향을 주지 않습니다. |
@@ -314,11 +315,130 @@ Entity의 단독 PLAY는 클릭할 때의 편집자 시점을 고정한 카메�
 | **MUSIC** | `all`, 사용자 플레이리스트 ID 또는 `/minigamelib music list`에 나온 곡 ID | 음악을 시작합니다. 새 MUSIC 큐는 이전 시네마틱 음악을 교체합니다. OGG 파일 경로를 그대로 넣지 말고 등록된 ID를 사용하세요. |
 | **STOP_MUSIC** | 비워 둠 | 현재 시네마틱 음악을 정지합니다. `duration`은 0으로 두어도 됩니다. |
 | **TRANSITION** | `minigamelib:transition-hbars` | 지정한 기간 동안 마스크가 열리며 화면을 드러냅니다. 예: 검정색·20틱이면 정상 TPS에서 약 1초의 전환입니다. |
+| **LETTERBOX** | 비워 둠 | 지정한 기간 동안 위아래 시네마 띠와 비네트를 표시합니다. 띠는 약 0.6초에 걸쳐 들어오고 나갑니다. `color`가 띠 색입니다(보통 `000000`). |
 | **EFFECT** | `minigamelib:fade` | 지정한 기간 동안 효과를 표시합니다. 이 `fade`는 기간 동안 단색 덮개를 표시하는 효과이며, 이름만으로 점진적인 페이드 인·아웃이 만들어지지는 않습니다. |
 
 `minigamelib:fade`는 EFFECT, `minigamelib:transition-hbars`는 TRANSITION용 ID입니다. 종류와 ID가 맞지 않으면 재생이 거절됩니다. 음악은 OGG 추가 → Polymer 팩 생성 성공 → 청취자의 팩 적용 완료가 먼저 필요합니다. 자세한 등록 방법은 아래 [음악](#음악)을 참고하세요.
 
 현재 UI는 같은 틱의 **첫 큐**를 편집합니다. UI로 작업할 때는 큐마다 서로 다른 틱을 사용하세요. 화면 효과가 시간상 겹치면 현재 활성 큐 중 더 나중에 시작한 큐가 표시됩니다.
+
+<a id="editor-dialogue"></a>
+
+### 대화: 대사 상자와 입력 대기
+
+![andlist 대사 장면](docs/images/cinematic-dialogue/typing.png)
+
+씬에 **대사(LINE)**를 넣으면 시청자 화면 오른쪽 아래에 대사 상자가 나타납니다. 상반신 초상화, 화자 이름, 빛이 흐르는 곡선, 한 글자씩 나타나며 화자 색에서 흰색으로 바뀌는 대사, 대사가 끝나면 깜빡이는 `⊙` 표시로 구성됩니다. 화자나 초상화가 바뀌면 초상화와 이름이 오른쪽 아래에서 미끄러져 들어옵니다. 같은 화자의 다음 줄은 글만 바뀝니다. 모든 요소는 바닐라 클라이언트에 리소스팩만으로 그립니다.
+
+씬 타임라인의 **+ LINE** 버튼, 또는 `LINE <화자>` 행을 클릭해 편집합니다.
+
+| 입력 항목 | 의미와 입력법 |
+| --- | --- |
+| **시간 (틱)** (`tick`) | 대사를 시작할 틱입니다. 대사마다 서로 다른 틱이어야 합니다. |
+| **화자 이름** (`speaker`) | 이름 칸에 표시할 글입니다. |
+| **초상화 ID** (`portrait`) | 아래에서 등록한 초상화 ID입니다. 비우면 초상화 없이 이름과 대사만 오른쪽으로 붙습니다. |
+| **표시할 글** (`text`) | 대사입니다. 너비에 맞게 자동으로 줄바꿈하며 `\n`으로 직접 줄을 나눌 수 있습니다. |
+| **길이 (틱)** (`duration`) | 대사가 화면에 남는 기간입니다. 다음 대사의 시작보다 짧으면 그 사이에 상자가 사라집니다. |
+| **끝에서 대기** (`wait`) | 켜면 대사의 마지막 틱에서 **씬 전체가 멈추고** 시청자의 점프·웅크리기·왼쪽 클릭을 기다립니다. 글이 아직 나오는 중에 누르면 먼저 전체 대사를 보여 줍니다. 여러 명이 보면 누구든 한 명이 넘기면 됩니다. |
+| **초당 글자 수** (`speed`) | 타자 속도입니다. 0이면 30입니다. |
+| **강조색** (`color`) | 이름, 이름 아래 점선, 새로 나온 글자의 색(RGB 16진수)입니다. 비우면 화자·전역 스타일을 따르고, 그것도 없으면 주황색 `f0954a`입니다. |
+| **스타일 JSON** (`style`) | 색과 글꼴·서식을 따로 정합니다. 아래 "글 서식과 스타일"을 보세요. |
+
+#### 글 서식과 스타일
+
+![서식을 넣은 대사와 시청자 얼굴 초상화](docs/images/cinematic-dialogue/styled.png)
+
+화자 이름과 대사에는 [MiniMessage](https://docs.advntr.dev/minimessage/format.html) 태그를 쓸 수 있습니다. 타자 효과는 태그를 빼고 글자 단위로 진행합니다.
+
+| 태그 | 결과 |
+| --- | --- |
+| `<b>…</b>` `<i>…</i>` `<u>…</u>` `<st>…</st>` `<obf>…</obf>` | 굵게, 기울임, 밑줄, 취소선, 흐트러짐 |
+| `<#ff6b6b>…</#ff6b6b>`, `<red>…</red>`, `<gradient:#f00:#00f>…</gradient>` | 글자 색. 색을 지정한 글자는 다 나온 뒤에도 그 색을 유지합니다 |
+| `<font:minecraft:uniform>…</font>` | 글꼴 (아래 "글꼴") |
+| `\<` | `<` 문자 그대로 |
+
+알 수 없는 태그(`<3` 등)는 글자로 남습니다. 대사 전체의 색과 서식은 `style`로 정합니다. 모든 항목은 선택이며 비운 항목은 아래쪽 단계에서 채웁니다.
+
+```json
+"style": {
+  "nameColor": 10466559, "lineColor": 5070735, "textColor": 14542069, "highlightColor": 13227775, "showLine": true,
+  "name": {"font": "minecraft:default", "bold": true, "italic": false, "underlined": false, "strikethrough": false, "obfuscated": false, "shadow": true},
+  "text": {"italic": true}
+}
+```
+
+| 항목 | 의미 |
+| --- | --- |
+| `nameColor` | 화자 이름 색 (기본: 강조색) |
+| `lineColor` | 이름 아래 점선 색 (기본: 이름 색). `showLine: false`면 점선을 숨깁니다 |
+| `textColor` | 다 나온 대사의 색 (기본 `f4f1ec`) |
+| `highlightColor` | 막 나온 글자가 시작하는 색 (기본: 이름 색) |
+| `name`, `text` | 이름·대사의 글꼴 ID와 굵게·기울임·밑줄·취소선·흐트러짐·그림자 |
+
+색은 JSON에서 10진수 정수입니다(편집기 입력 창에도 같은 JSON을 넣습니다). 적용 순서는 내장 기본값 → 전역 기본(`DialogueStyle.setDefault`) → 화자별(`DialogueStyle.forSpeaker`) → 대사의 강조색 → 대사의 `style`입니다.
+
+#### 스킨과 초상화
+
+초상화는 `config/minigame-lib/dialogue/portraits/<id>.png`에 두면 다음 팩 생성 때 포함됩니다. 64×64 스킨 PNG는 서버가 3/4 각도의 상반신으로 렌더링하고(slim 팔 자동 판별), 다른 크기의 PNG는 그대로 초상화로 씁니다(최대 256px로 축소). 플레이어 스킨은 명령으로 받을 수 있습니다.
+
+```text
+/minigamelib dialogue skin <player>       # 스킨을 받아 초상화 <id>와 마네킹 스킨 skin:<id>로 등록(id = 이름 소문자), 이후 팩 다시 생성
+/minigamelib dialogue portrait <player>   # 위와 같음 (이전 이름)
+/minigamelib dialogue advance [players]   # 입력 대기 중인 대사를 넘김 (게임 코드·명령 블록용)
+```
+
+#### 글꼴
+
+대사는 Pretendard SemiBold, 화자 이름은 Libre Baskerville Bold(한글은 Pretendard Bold)로 그립니다. 두 글꼴 모두 SIL OFL 1.1이며 팩에는 한글 음절·라틴·기호만 담은 부분 글꼴(약 4MB)이 들어갑니다. 다른 글꼴을 쓰려면 `config/minigame-lib/dialogue/fonts/`에 `text.ttf`(대사), `name.ttf`(이름), `name_fallback.ttf`(이름에서 첫 글꼴에 없는 글자)를 넣고 팩을 다시 생성합니다. 서버는 같은 파일로 글자 폭을 재서 줄바꿈과 이름 정렬을 계산합니다. 줄 단위로 다른 글꼴을 쓰려면 `style`의 `font`나 `<font:…>` 태그에 글꼴 ID를 넣습니다. `minecraft:default`(바닐라 픽셀 글꼴)·`minecraft:uniform`은 바로 쓸 수 있고, 새 TTF는 Java에서 `DialogueFonts.register(id, ttf, size, shift)`로 팩에 넣습니다. 서버가 폭을 모르는 글꼴은 바닐라 글꼴 폭으로 줄을 나눕니다. 대사 뒤에는 오른쪽 아래가 짙어지는 어두운 띠를 깔아 밝은 배경에서도 글이 읽히게 합니다.
+
+대화 장면에 인물을 세우려면 Entity의 `type`을 `minecraft:mannequin`으로 하고 `profile`에 스킨을 지정합니다.
+
+| `profile` | 스킨 |
+| --- | --- |
+| 플레이어 이름 또는 UUID | Mojang에서 조회한 그 플레이어의 스킨 |
+| `skin:<id>` | 등록한 스킨(초상화 폴더의 64×64 PNG, `/minigamelib dialogue skin`, `Skins.register`). 팩에 들어가므로 계정·조회가 필요 없습니다 |
+
+초상화 ID에 `head:<플레이어 이름|UUID|skin:id>`를 쓰면 그 플레이어의 얼굴을, `head:@viewer`를 쓰면 **보는 사람 자신의 얼굴**을 그립니다. 바닐라 플레이어 얼굴 글리프라 팩을 다시 만들 필요가 없습니다. 화면 기울기(roll)는 지원하지 않습니다.
+
+Java에서는 `ScreenOverlay`로 같은 경로에 직접 그릴 수 있습니다. 시네마틱 시청 중에는 일반 `DisplayHud` 패킷이 차단되므로 화면 UI는 `CameraViews.get(player).overlay()`를 사용하세요.
+
+```java
+var overlay = CameraViews.get(player).overlay();
+overlay.sprite("my/hint").text(Component.literal("점프로 계속"))
+        .alignment(DisplayHud.HudAlignment.CENTER).at(960, 1000, 50, 3, 0);
+Skins.register("boss", skinImage);   // 초상화 + 마네킹 스킨 skin:boss, 다음 팩 생성에 포함
+```
+
+### 다른 모드에서 설정하기
+
+minigame-lib을 의존성으로 둔 모드는 서버 시작 전에 스킨·글꼴·스타일을 등록하고, 씬은 코드로 만들어 재생합니다. 스킨·초상화·글꼴은 리소스팩에 들어가므로 **팩이 만들어지기 전**(모드 초기화나 `SERVER_STARTING`)에 등록하세요. 나중에 등록했다면 `/polymer generate-pack`이나 재시작 뒤에 보입니다. 스타일은 언제 바꿔도 다음 대사부터 적용됩니다.
+
+```java
+public final class MyMod implements ModInitializer {
+    @Override public void onInitialize() {
+        try (var png = MyMod.class.getResourceAsStream("/skins/guide.png")) {
+            Skins.register("guide", png);                  // 초상화 "guide" + 마네킹 profile "skin:guide"
+        } catch (IOException e) { throw new UncheckedIOException(e); }
+        try (var ttf = MyMod.class.getResourceAsStream("/fonts/handwriting.ttf")) {
+            DialogueFonts.register(Identifier.fromNamespaceAndPath("mymod", "handwriting"), ttf.readAllBytes(), 9, 1);
+        } catch (IOException e) { throw new UncheckedIOException(e); }
+
+        DialogueStyle.setDefault(DialogueStyle.of().textColor(0xF0F0F0));
+        DialogueStyle.forSpeaker("가이드", DialogueStyle.of().nameColor(0x7FD4FF).lineColor(0x3A6F8F)
+                .name(TextFormat.of().bold(true)).text(TextFormat.of().font("mymod:handwriting")));
+    }
+}
+
+// 게임 코드 (서버 스레드)
+var scene = CinematicBuilder.scene("mymod.tutorial")
+        .still(0, x, y, z, 180, 5)
+        .mannequin("guide", "guide", a -> a.skin("guide").key(0, x, y - 1.6, z - 2, 0, 0))
+        .dialogue(0, d -> d
+                .say("가이드", "guide", "<b>점프</b>로 대사를 넘길 수 있어요.").waitForInput()
+                .say("<obf>???</obf>", "head:@viewer", "...<st>누구</st> 나야.").style(DialogueStyle.of().nameColor(0x9FB4FF)))
+        .build();
+MinigameLib.get(server).cinematics().play(scene, players, listener);
+```
 
 <a id="editor-tutorial"></a>
 
@@ -449,6 +569,49 @@ Playback global = lib.music().playGlobal("all");
 ```
 
 시네마틱과 편집 API는 서버 스레드에서 호출합니다. 음악 완료 콜백은 음악 스레드에서도 실행되므로 월드 변경은 `server.execute`로 전달하세요. `CinematicCatalog`와 `CinematicData.ResolvedScene`으로 파일 없이도 동일한 정의를 검증·재생할 수 있습니다.
+
+### 코드로 시네마틱 만들기
+
+`CinematicBuilder`는 편집기와 같은 데이터(`ResolvedScene`)를 코드로 만듭니다. 트랙 ID는 `<씬>.shotN`, `<씬>.<배우>`로 붙고, `duration`을 생략하면 가장 늦은 키프레임·대사·큐에 맞춥니다. 각 배우 키프레임은 앞 키의 포즈와 장비를 이어받습니다.
+
+```java
+import kim.biryeong.minigamelib.cinematic.CinematicBuilder;
+import kim.biryeong.minigamelib.cinematic.CinematicListener;
+
+ResolvedScene scene = CinematicBuilder.scene("boss-intro").name("보스 등장")
+        .dimension(Level.OVERWORLD)
+        .shot(0, k -> k.key(0, 10.5, 66, 3, 160, 5).fov(50)        // 카메라 컷 1 (0틱부터)
+                .key(120, 10, 65.8, 2.4, 165, 3).fov(44).smooth())
+        .still(120, 4, 66, 8, -150, 6)                              // 120틱에 고정 컷
+        .mannequin("andlist", "andlist", a -> a.key(0, 10.5, 64, 0.5, -16, 0)
+                .key(100, 10.5, 64, 0.5, 20, 0).smooth().equip("mainhand", "minecraft:lantern"))
+        .letterbox()                                               // 씬 전체 레터박스
+        .music(0, "boss_theme")
+        .dialogue(10, d -> d
+                .say("andlist", "andlist", "문 뒤에 누가 있어?").waitForInput()
+                .say("andlist", "andlist", "...대답해 봐.").hold(40)
+                .pause(20)
+                .say("???", null, "열어 줄게.").color(0x9FB4FF).speed(20).waitForInput())
+        .marker(120, "spawn-boss")
+        .build();
+
+lib.cinematics().play(scene, players, new CinematicListener() {
+    @Override public void onMarker(String id, int tick) { if (id.equals("spawn-boss")) spawnBoss(); }
+    @Override public void onAdvance(ServerPlayer player, DialogueLine line) { /* 누가 넘겼는지 */ }
+});
+```
+
+| 기능 | 설명 |
+| --- | --- |
+| `dialogue(start, d -> ...)` | `say(화자, 초상화, 글)`로 대사를 차례로 붙입니다. 길이를 주지 않으면 타자 시간 + 8틱, 대기 없는 줄은 여기에 `hold`(기본 30)를 더합니다. 줄 사이 간격은 `gap`(기본 4), `pause(틱)`은 다음 줄을 늦춥니다. |
+| `line(DialogueLine)` | 시작 틱을 직접 정해 한 줄을 넣습니다. |
+| `marker(tick, id)` | 게임 코드용 신호입니다. 화면에는 아무것도 그리지 않고 `onMarker`를 부릅니다. |
+| `CinematicListener` | `onMarker`, `onLine`(대사 시작), `onWaiting`(입력 대기 시작), `onAdvance`(누가 넘겼는지). 모두 서버 스레드에서 오고, 예외는 기록만 하고 씬을 멈추지 않습니다. 끝난 결과는 `Playback.completion()`으로 받습니다. |
+| `cinematics().watching(p)` / `time(p)` / `line(p)` / `waiting(p)` | 시청 여부, 현재 틱(없으면 -1), 화면의 대사, 입력 대기 여부를 조회합니다. |
+| `cinematics().advance(p)` | 대기 중인 대사를 코드로 넘깁니다. `/minigamelib dialogue advance`와 같습니다. |
+| `say(...).style(DialogueStyle)` / `defaults(DialogueStyle)` | 한 줄, 또는 이후 모든 줄의 색·서식 |
+| `ActorBuilder.skin(id)` | 마네킹에 `skin:<id>` 스킨을 입힙니다 |
+| `catalog().save(scene, overwrite)` | 빌더로 만든 씬을 트랙·씬 JSON으로 저장해 편집기에서 이어서 고칠 수 있게 합니다. `overwrite`가 `false`이고 파일이 있으면 예외를 던집니다. |
 
 ## 기존 기능
 

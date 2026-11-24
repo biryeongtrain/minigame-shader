@@ -34,6 +34,9 @@ public final class CameraViewSession implements AutoCloseable {
     private long loadingSince;
     private boolean ready, closed, autoReveal = true;
     private String failure;
+    private final ScreenOverlay overlay = new ScreenOverlay(this);
+    private final java.util.concurrent.atomic.AtomicInteger advanceRequests = new java.util.concurrent.atomic.AtomicInteger();
+    private boolean lastInputPressed;
     private int teleportId = Integer.MIN_VALUE;
     private float yaw, pitch;
 
@@ -63,6 +66,21 @@ public final class CameraViewSession implements AutoCloseable {
     public void holdCurtain() { autoReveal = false; }
     public boolean tracks(ChunkPos pos) { return queued.contains(pos.pack()) && !chunks.isPending(pos.pack()); }
     public void send(Packet<?> packet) { CameraViews.send(player, packet); }
+    /** Screen-fixed sprites drawn through this camera (DisplayHud packets are blocked while watching). */
+    public ScreenOverlay overlay() { return overlay; }
+
+    /** Called from the network thread with the client's movement keys; a new jump/sneak press is one advance request. */
+    void input(net.minecraft.world.entity.player.Input input) {
+        boolean pressed = input.jump() || input.shift();
+        if (pressed && !lastInputPressed) advanceRequests.incrementAndGet();
+        lastInputPressed = pressed;
+    }
+    /** Left click (arm swing) from the viewer. */
+    void click() { advanceRequests.incrementAndGet(); }
+    /** Queues one advance request, as if the viewer pressed the advance key. */
+    public void requestAdvance() { advanceRequests.incrementAndGet(); }
+    /** Takes all pending advance requests (jump, sneak or left click) since the last call. */
+    public int takeAdvanceRequests() { return advanceRequests.getAndSet(0); }
 
     public void move(ServerLevel nextLevel, Vec3 pos, float yaw, float pitch, boolean cut) {
         if (closed) throw new IllegalStateException("View is closed");
@@ -103,7 +121,7 @@ public final class CameraViewSession implements AutoCloseable {
         CameraViews.sending(holder::tick);
         updateRegion();
         if (cut) clearPreload();
-        if (dimensionChange) CameraViews.sending(() -> holder.startWatching(player));
+        if (dimensionChange) { CameraViews.sending(() -> holder.startWatching(player)); overlay.attach(); }
         if (dimensionChange || cut) {
             send(new ClientboundSetCameraPacket(soundAnchor));
             if (needsCurtain) curtain(true);
@@ -192,6 +210,7 @@ public final class CameraViewSession implements AutoCloseable {
             if (ready && autoReveal) curtain(false);
         }
         updateEntities();
+        overlay.flush();
         if (player.level().getServer().getTickCount() % 20 == 0) environment();
     }
 
@@ -252,6 +271,7 @@ public final class CameraViewSession implements AutoCloseable {
         closed = true;
         CameraViews.remove(this);
         try {
+            overlay.detach();
             CameraViews.sending(holder::destroy);
             if (!player.hasDisconnected()) {
                 for (int id : entities.keySet()) send(new ClientboundRemoveEntitiesPacket(id));

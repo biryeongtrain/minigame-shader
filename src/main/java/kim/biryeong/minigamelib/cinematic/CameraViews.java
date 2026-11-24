@@ -149,6 +149,9 @@ public final class CameraViews {
         catch (RuntimeException e) { view.close(); throw e; }
         return view;
     }
+    /** Network-thread bridge for {@code ViewInputMixin}. */
+    public static void input(CameraViewSession view, net.minecraft.world.entity.player.Input input) { view.input(input); }
+    public static void click(CameraViewSession view) { view.click(); }
     public static void stop(ServerPlayer player) { var view = get(player); if (view != null) view.close(); }
     static void remove(CameraViewSession view) { VIEWS.remove(view.player().getUUID(), view); }
 

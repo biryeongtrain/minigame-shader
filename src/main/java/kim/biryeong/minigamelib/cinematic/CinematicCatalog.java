@@ -56,6 +56,26 @@ public final class CinematicCatalog {
         finally { Files.deleteIfExists(temp); }
         return new Draft(draft.kind,draft.id,value,hash(bytes));
     }
+    /**
+     * Saves every track and the scene of {@code scene} (e.g. from {@link CinematicBuilder}) so it can be edited and
+     * played by ID. Existing files are kept unless {@code overwrite}; tracks are written before the scene.
+     */
+    public synchronized void save(ResolvedScene scene, boolean overwrite) throws IOException {
+        var values = new ArrayList<Object>();
+        values.addAll(scene.cameras().values()); values.addAll(scene.entities().values()); values.add(scene.scene());
+        for (var value : values) {
+            var kind = value instanceof CameraTrack ? Kind.CAMERA : value instanceof EntityTrack ? Kind.ENTITY : Kind.SCENE;
+            String id = assetId(value);
+            boolean exists = Files.exists(path(kind, id), LinkOption.NOFOLLOW_LINKS);
+            if (exists && !overwrite) throw new IOException("Already exists: " + kind + "/" + id);
+        }
+        for (var value : values) {
+            var kind = value instanceof CameraTrack ? Kind.CAMERA : value instanceof EntityTrack ? Kind.ENTITY : Kind.SCENE;
+            String id = assetId(value);
+            String revision = Files.exists(path(kind, id), LinkOption.NOFOLLOW_LINKS) ? read(kind, id).revision : "";
+            save(new Draft(kind, id, value, revision), value);
+        }
+    }
     public synchronized void delete(Draft draft) throws IOException {
         if (!read(draft.kind,draft.id).revision.equals(draft.revision)) throw new IOException("File changed; reopen before deleting");
         if (draft.kind != Kind.SCENE) for (String id : list(Kind.SCENE)) {

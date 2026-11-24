@@ -12,7 +12,8 @@
       "kim.biryeong.minigamelib.LibraryGameTests"
     ],
     "fabric-client-gametest": [
-      "kim.biryeong.minigamelib.ClientVisualTests"
+      "kim.biryeong.minigamelib.ClientVisualTests",
+      "kim.biryeong.minigamelib.DialogueVisualTests"
     ]
   },
   "depends": {

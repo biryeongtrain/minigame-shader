@@ -40,7 +40,8 @@ vec4 displayhud_clip(vec3 position) {
     vec3 pos = position + vec3(0.0, 1.5 * DISPLAYHUD_GAP + shiftY, 0.0);
     vec2 xy = vec2(-pos.x * keep, pos.y) / (DISPLAYHUD_REF * vec2(DISPLAYHUD_X, DISPLAYHUD_Y) / 2.0);
     // Reversed Z (closer = larger depth), kept inside 0..1 so both [0,1] and [-1,1] depth ranges work.
-    return vec4(xy.x + offset, xy.y, 0.5 - pos.z * (0.5 / DISPLAYHUD_DEPTH), 1.0);
+    // z beyond +-DEPTH (cinematic overlay layers, drawn without depth test) is clamped into the depth range.
+    return vec4(xy.x + offset, xy.y, 0.5 - clamp(pos.z, -0.9 * DISPLAYHUD_DEPTH, 0.9 * DISPLAYHUD_DEPTH) * (0.5 / DISPLAYHUD_DEPTH), 1.0);
 }
 
 // Above-hand display (DisplayHud 2.2 Beta)

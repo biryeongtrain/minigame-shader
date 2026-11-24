@@ -27,6 +27,7 @@ public final class QAControls implements ModInitializer {
         return ((Map<?,?>)field(editor,"sessions")).get(player.getUUID());
     }
     @Override public void onInitialize() {
+        DialogueDemo.init();
         CommandRegistrationCallback.EVENT.register((dispatcher,access,env)->dispatcher.register(literal("minigameqa").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .then(literal("status").executes(c->run(c.getSource().getPlayerOrException(),p->{
                     var view=kim.biryeong.minigamelib.cinematic.CameraViews.get(p);
@@ -50,6 +51,11 @@ public final class QAControls implements ModInitializer {
                     var entity=new Interaction(net.minecraft.world.entity.EntityTypes.INTERACTION,p.level());entity.setId(hit.getEntityId());
                     p.connection.handleInteract(new net.minecraft.network.protocol.game.ServerboundInteractPacket(entity.getId(),net.minecraft.world.InteractionHand.MAIN_HAND,net.minecraft.world.phys.Vec3.ZERO,false));
                 }))))
+                .then(literal("dialogue").executes(c->run(c.getSource().getPlayerOrException(),p->{
+                    DialogueDemo.stage(p.level().getServer());
+                    p.teleportTo(p.level(),DialogueDemo.X,DialogueDemo.Y,DialogueDemo.Z+3,java.util.Set.of(),180,0,true);
+                    p.level().getServer().execute(()->DialogueDemo.play(p));
+                })))
                 .then(literal("dialog").then(argument("payload",greedyString()).executes(c->run(c.getSource().getPlayerOrException(),p->{
                     var id=(Identifier)field(session(p),"dialogId");
                     if(id==null)throw new IllegalStateException("No open editor dialog");

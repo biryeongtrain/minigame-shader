@@ -240,7 +240,7 @@ public final class CinematicEditor implements AutoCloseable {
             for(int i=0;i<=20;i++)rect(from+span*i/20,-.48,.01,i%5==0?.09:.045,0xff907758,.01);
             for(int i=0;i<8;i++)rect(x+.12,-.82-i*.255,1.25,.23,i%2==0?0xff585858:0xff242424,.005);
             if(value instanceof Scene scene) {
-                int count=scene.cameras().size()+scene.entities().size()+scene.cues().size(),pages=Math.max(1,(count+7)/8);
+                int count=scene.cameras().size()+scene.entities().size()+scene.cues().size()+scene.dialogues().size(),pages=Math.max(1,(count+7)/8);
                 trackPage=Math.min(trackPage,pages-1);int first=trackPage*8,row=0;
                 if(pages>1) {
                     button(x+2.2,.07,.28,.24,"<",0xff39312a,0xffffffff,.65f,true,()->trackPage=Math.max(0,trackPage-1));
@@ -263,9 +263,15 @@ public final class CinematicEditor implements AutoCloseable {
                     if(row>=first&&row<first+8)track(row,cue.type().name(),cue.tick(),Math.min(duration,cue.tick()+Math.max(1,cue.duration())),duration,true,()->{cursor=cue.tick();cues();});
                     row++;
                 }
-                button(x+.12,-2.83,1.36,.24,"+ CAMERA",0xff514132,0xffffffff,.56f,true,()->clipDialog(false,-1));
-                button(x+1.56,-2.83,1.36,.24,"+ ENTITY",0xff514132,0xffffffff,.56f,true,()->clipDialog(true,-1));
-                button(x+3,-2.83,1.51,.24,"+ CUE",0xff514132,0xffffffff,.56f,true,this::cues);
+                for(int i=0;i<scene.dialogues().size();i++,row++) {
+                    if(row<first||row>=first+8)continue;
+                    var line=scene.dialogues().get(i);int index=i;
+                    track(row,"LINE "+(line.speaker().isBlank()?"-":line.speaker()),line.tick(),Math.min(duration,line.end()),duration,true,()->{cursor=line.tick();lineDialog(index);});
+                }
+                button(x+.12,-2.83,1.06,.24,"+ CAMERA",0xff514132,0xffffffff,.5f,true,()->clipDialog(false,-1));
+                button(x+1.24,-2.83,1.06,.24,"+ ENTITY",0xff514132,0xffffffff,.5f,true,()->clipDialog(true,-1));
+                button(x+2.36,-2.83,1.0,.24,"+ CUE",0xff514132,0xffffffff,.5f,true,this::cues);
+                button(x+3.42,-2.83,1.09,.24,"+ LINE",0xff514132,0xffffffff,.5f,true,()->lineDialog(-1));
             } else {
                 var names=value instanceof CameraTrack?List.of("Position","Rotation","FOV"):List.of("Position","Rotation","Pose","Equipment");
                 for(int i=0;i<names.size();i++) {
@@ -331,13 +337,13 @@ public final class CinematicEditor implements AutoCloseable {
             if (value instanceof Scene s) fields.put("duration",""+s.duration());
             else {
                 fields.put("dimension",dimension(value));
-                if (value instanceof EntityTrack e) { fields.put("type",e.type()); fields.put("item",Objects.toString(e.item(),"")); fields.put("block",Objects.toString(e.block(),"")); fields.put("text",Objects.toString(e.text(),"")); }
+                if (value instanceof EntityTrack e) { fields.put("type",e.type()); fields.put("item",Objects.toString(e.item(),"")); fields.put("block",Objects.toString(e.block(),"")); fields.put("text",Objects.toString(e.text(),"")); fields.put("profile",Objects.toString(e.profile(),"")); }
             }
             show("이름과 속성",fields,tag -> {
                 String name=required(tag,"name");
                 if (value instanceof CameraTrack c) update(new CameraTrack(1,c.id(),name,required(tag,"dimension"),c.keyframes()));
-                else if (value instanceof EntityTrack e) update(new EntityTrack(1,e.id(),name,required(tag,"dimension"),required(tag,"type"),nullable(tag,"item"),nullable(tag,"block"),nullable(tag,"text"),e.keyframes()));
-                else { var s=(Scene)value; update(new Scene(1,s.id(),name,Integer.parseInt(required(tag,"duration")),s.cameras(),s.entities(),s.cues())); }
+                else if (value instanceof EntityTrack e) update(new EntityTrack(1,e.id(),name,required(tag,"dimension"),required(tag,"type"),nullable(tag,"item"),nullable(tag,"block"),nullable(tag,"text"),e.keyframes(),nullable(tag,"profile")));
+                else { var s=(Scene)value; update(new Scene(1,s.id(),name,Integer.parseInt(required(tag,"duration")),s.cameras(),s.entities(),s.cues(),s.dialogues())); }
             });
         }
         void duplicate() {
@@ -363,7 +369,7 @@ public final class CinematicEditor implements AutoCloseable {
         void setFrames(List<Keyframe> frames) {
             frames.sort(Comparator.comparingInt(Keyframe::tick)); Object value=current().value();
             if (value instanceof CameraTrack c) update(new CameraTrack(1,c.id(),c.name(),c.dimension(),frames));
-            else { var e=(EntityTrack)value; update(new EntityTrack(1,e.id(),e.name(),e.dimension(),e.type(),e.item(),e.block(),e.text(),frames)); }
+            else { var e=(EntityTrack)value; update(new EntityTrack(1,e.id(),e.name(),e.dimension(),e.type(),e.item(),e.block(),e.text(),frames,e.profile())); }
         }
         void keyframe(int time) {
             Object value=current().value(); var f=sample(frames(value),time);
@@ -389,7 +395,7 @@ public final class CinematicEditor implements AutoCloseable {
                 if (index>=0) changed.remove(index);
                 if (!Boolean.parseBoolean(required(tag,"delete"))) changed.add(new Clip(required(tag,"track"),Integer.parseInt(required(tag,"start"))));
                 changed.sort(Comparator.comparingInt(Clip::start));
-                update(new Scene(1,scene.id(),scene.name(),scene.duration(),entity?scene.cameras():changed,entity?changed:scene.entities(),scene.cues()));
+                update(new Scene(1,scene.id(),scene.name(),scene.duration(),entity?scene.cameras():changed,entity?changed:scene.entities(),scene.cues(),scene.dialogues()));
             });
         }
         void cues() {
@@ -398,7 +404,32 @@ public final class CinematicEditor implements AutoCloseable {
             show("타임라인 큐",Map.of("tick",""+cursor,"type",prior.type().name(),"id",Objects.toString(prior.id(),""),"duration",""+prior.duration(),"color",Integer.toHexString(prior.color()),"delete","false"), tag -> {
                 int time=Integer.parseInt(required(tag,"tick")); var cues=new ArrayList<>(scene.cues()); cues.removeIf(c -> c.tick()==time && c.type()==prior.type());
                 if (!Boolean.parseBoolean(required(tag,"delete"))) cues.add(new Cue(time,CueType.valueOf(required(tag,"type").toUpperCase(Locale.ROOT)),nullable(tag,"id"),Integer.parseInt(required(tag,"duration")),Integer.parseUnsignedInt(required(tag,"color"),16)));
-                cues.sort(Comparator.comparingInt(Cue::tick)); update(new Scene(1,scene.id(),scene.name(),scene.duration(),scene.cameras(),scene.entities(),cues));
+                cues.sort(Comparator.comparingInt(Cue::tick)); update(new Scene(1,scene.id(),scene.name(),scene.duration(),scene.cameras(),scene.entities(),cues,scene.dialogues()));
+            });
+        }
+        /** Adds (index -1) or edits a dialogue line; ticks must stay unique. */
+        void lineDialog(int index) {
+            var scene=(Scene)current().value();
+            var line=index<0?new DialogueLine(cursor,"","",null,"",60,false,0):scene.dialogues().get(index);
+            var fields=new LinkedHashMap<String,String>();
+            fields.put("tick",""+line.tick()); fields.put("speaker",line.speaker()); fields.put("portrait",Objects.toString(line.portrait(),""));
+            fields.put("text",line.text()); fields.put("duration",""+line.duration()); fields.put("wait",""+line.waitForInput());
+            fields.put("speed",""+line.speed()); fields.put("color",line.color()==null?"":Integer.toHexString(line.color()));
+            fields.put("style",line.style()==null?"":CinematicCatalog.JSON.toJson(line.style()).replaceAll("\\s+","")); fields.put("delete","false");
+            show("대사",fields,Map.of("wait",Map.of("false","시간이 되면 넘김","true","입력(점프·웅크리기·클릭)까지 대기")),tag -> {
+                var lines=new ArrayList<>(scene.dialogues());
+                if (index>=0) lines.remove(index);
+                if (!Boolean.parseBoolean(required(tag,"delete"))) {
+                    int tick=Integer.parseInt(required(tag,"tick"));
+                    lines.removeIf(l -> l.tick()==tick);
+                    String speed=nullable(tag,"speed"), color=nullable(tag,"color"), style=nullable(tag,"style");
+                    lines.add(new DialogueLine(tick,Objects.toString(nullable(tag,"speaker"),""),nullable(tag,"portrait"),color==null?null:Integer.parseUnsignedInt(color,16),
+                            required(tag,"text").replace("\\n","\n"),Integer.parseInt(required(tag,"duration")),Boolean.parseBoolean(required(tag,"wait")),speed==null?0:Float.parseFloat(speed),
+                            style==null?null:CinematicCatalog.JSON.fromJson(style,kim.biryeong.minigamelib.cinematic.dialogue.DialogueStyle.class)));
+                    cursor=tick;
+                }
+                lines.sort(Comparator.comparingInt(DialogueLine::tick));
+                update(scene.withDialogues(lines));
             });
         }
         void preview(boolean paused) throws IOException {
@@ -479,7 +510,8 @@ public final class CinematicEditor implements AutoCloseable {
             case "position"->"위치: x y z"; case "rotation"->"회전: yaw pitch"; case "fov"->"FOV (선택)";
             case "interpolation"->"보간 방식"; case "pose"->"포즈"; case "animation"->"애니메이션 (선택)";
             case "equipment"->"장비 JSON"; case "delete"->"작업"; case "item"->"아이템 ID";
-            case "block"->"블록 ID"; case "text"->"표시할 글"; case "color"->"색상 (RGB 16진수)"; default->key;
+            case "block"->"블록 ID"; case "text"->"표시할 글"; case "profile"->"스킨: 플레이어 이름 또는 skin:<id> (mannequin)";
+            case "speaker"->"화자 이름"; case "portrait"->"초상화 ID 또는 head:<플레이어|@viewer> (선택)"; case "wait"->"끝에서 대기"; case "speed"->"초당 글자 수 (0 = 30)"; case "color"->"강조색 (RGB 16진수, 선택)"; case "style"->"스타일 JSON (선택)"; default->key;
         };
     }
 }

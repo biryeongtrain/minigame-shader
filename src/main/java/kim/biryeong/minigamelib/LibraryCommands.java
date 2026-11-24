@@ -31,6 +31,10 @@ public final class LibraryCommands {
                         .then(literal("play").then(argument("scene",word()).suggests((c,b)->{try {lib(c).cinematics().catalog().list(kim.biryeong.minigamelib.cinematic.CinematicData.Kind.SCENE).forEach(b::suggest);}catch(Exception ignored){}return b.buildFuture();})
                                 .executes(c->cinematic(c,false)).then(argument("players",players()).executes(c->cinematic(c,true)))))
                         .then(literal("stop").executes(c->stopCinematic(c,false)).then(argument("players",players()).executes(c->stopCinematic(c,true)))))
+                .then(literal("dialogue")
+                        .then(literal("portrait").then(argument("player",word()).executes(LibraryCommands::fetchPortrait)))
+                        .then(literal("skin").then(argument("player",word()).executes(LibraryCommands::fetchPortrait)))
+                        .then(literal("advance").executes(c->advance(c,false)).then(argument("players",players()).executes(c->advance(c,true)))))
                 .then(literal("music")
                         .then(literal("list").executes(c->{var catalog=lib(c).music().catalog();c.getSource().sendSuccess(()->Component.literal("Playlists: "+catalog.playlists().keySet()),false);catalog.tracks().values().forEach(t->c.getSource().sendSuccess(()->Component.literal(t.id()+" | "+t.path()+" | "+String.format(Locale.ROOT,"%.2fs",t.seconds())),false));return catalog.tracks().size();}))
                         .then(literal("play").then(argument("music",word()).suggests((c,b)->{lib(c).music().catalog().playlists().keySet().forEach(b::suggest);lib(c).music().catalog().tracks().keySet().forEach(b::suggest);return b.buildFuture();})
@@ -45,6 +49,18 @@ public final class LibraryCommands {
     private static String list(CommandContext<CommandSourceStack> c,kim.biryeong.minigamelib.cinematic.CinematicData.Kind kind) { try{return lib(c).cinematics().catalog().list(kind).toString();}catch(Exception e){return e.getMessage();} }
     private static int cinematic(CommandContext<CommandSourceStack> c,boolean specified) throws com.mojang.brigadier.exceptions.CommandSyntaxException {return checked(()->{lib(c).cinematics().play(getString(c,"scene"),targets(c,specified));return 1;});}
     private static int stopCinematic(CommandContext<CommandSourceStack> c,boolean specified) throws com.mojang.brigadier.exceptions.CommandSyntaxException {return checked(()->{targets(c,specified).forEach(lib(c).cinematics()::stop);return 1;});}
+    private static int advance(CommandContext<CommandSourceStack> c,boolean specified) throws com.mojang.brigadier.exceptions.CommandSyntaxException {return checked(()->{targets(c,specified).forEach(lib(c).cinematics()::advance);return 1;});}
+    /** Downloads a player's skin into the portrait folder; the portrait ships with the next pack build. */
+    private static int fetchPortrait(CommandContext<CommandSourceStack> c) {
+        var name=getString(c,"player"); var source=c.getSource(); var server=source.getServer();
+        source.sendSuccess(()->Component.literal("스킨을 가져오는 중: "+name),false);
+        kim.biryeong.minigamelib.cinematic.Skins.fetch(server,name)
+.whenComplete((id,error)->server.execute(()->{
+            if(error!=null) source.sendFailure(Component.literal("스킨을 가져오지 못했습니다: "+(error.getCause()==null?error:error.getCause())));
+            else source.sendSuccess(()->Component.literal("스킨 '"+id+"'를 등록했습니다 (초상화 "+id+", 마네킹 profile skin:"+id+"). 팩을 다시 만들어 적용하세요 (/polymer generate-pack)."),true);
+        }));
+        return 1;
+    }
     private static int music(CommandContext<CommandSourceStack> c,boolean specified) throws com.mojang.brigadier.exceptions.CommandSyntaxException {return checked(()->{lib(c).music().play(getString(c,"music"),targets(c,specified));return 1;});}
     private static int stopMusic(CommandContext<CommandSourceStack> c,boolean specified) throws com.mojang.brigadier.exceptions.CommandSyntaxException {return checked(()->{lib(c).music().stop(targets(c,specified));return 1;});}
     private static int nextMusic(CommandContext<CommandSourceStack> c,boolean specified) throws com.mojang.brigadier.exceptions.CommandSyntaxException {return checked(()->{lib(c).music().next(targets(c,specified));return 1;});}

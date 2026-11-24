@@ -35,6 +35,7 @@ public final class MinigameLib implements AutoCloseable {
     public CinematicEditor editor() { return editor; }
     static void init() {
         MusicPacks.init(CONFIG.resolve("music"));
+        kim.biryeong.minigamelib.cinematic.dialogue.DialogueAssets.init(CONFIG.resolve("dialogue").resolve("portraits"));
         ServerLifecycleEvents.SERVER_STARTING.register(MinigameLib::get);
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> { var lib = SERVERS.get(server); if (lib != null) lib.close(); });
         ServerLifecycleEvents.SERVER_STOPPED.register(SERVERS::remove);

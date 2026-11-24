@@ -27,13 +27,27 @@ public abstract class ViewInputMixin {
     @Inject(method = "teleport(Lnet/minecraft/world/entity/PositionMoveRotation;Ljava/util/Set;)V", at = @At("HEAD"))
     private void minigamelib$beforeConnectionTeleport(CallbackInfo ci) { CameraViews.stop(player); }
 
-    @Inject(method = {"handleMovePlayer", "handleMoveVehicle", "handlePlayerInput", "handlePlayerAction",
+    @Inject(method = {"handleMovePlayer", "handleMoveVehicle", "handlePlayerAction",
             "handleUseItemOn", "handleUseItem", "handleInteract", "handlePlayerCommand", "handleSetCarriedItem",
             "handleContainerClick", "handleContainerButtonClick", "handleSetCreativeModeSlot", "handlePlayerAbilities",
             "handleTeleportToEntityPacket", "handleAcceptTeleportPacket", "handleAcceptPlayerLoad",
             "handlePickItemFromBlock", "handlePickItemFromEntity", "handlePlaceRecipe", "handleSelectTrade", "handleRenameItem", "handleEditBook"}, at = @At("HEAD"), cancellable = true)
     private void minigamelib$freezeInput(CallbackInfo ci) {
         if (CameraViews.get(player) != null) ci.cancel();
+    }
+
+    /** Movement keys are frozen too, but a new jump/sneak press advances cinematic dialogue. */
+    @Inject(method = "handlePlayerInput", at = @At("HEAD"), cancellable = true)
+    private void minigamelib$dialogueInput(net.minecraft.network.protocol.game.ServerboundPlayerInputPacket packet, CallbackInfo ci) {
+        var view = CameraViews.get(player);
+        if (view != null) { CameraViews.input(view, packet.input()); ci.cancel(); }
+    }
+
+    /** A left click (punch) advances cinematic dialogue instead of swinging the frozen body. */
+    @Inject(method = "handlePunch", at = @At("HEAD"), cancellable = true)
+    private void minigamelib$dialogueClick(CallbackInfo ci) {
+        var view = CameraViews.get(player);
+        if (view != null) { CameraViews.click(view); ci.cancel(); }
     }
 
     @Inject(method = "handleChunkBatchReceived", at = @At("HEAD"), cancellable = true)

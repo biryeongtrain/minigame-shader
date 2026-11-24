@@ -230,5 +230,83 @@ public final class LibraryGameTests {
             run.stop();check(h,CameraViews.ticketCount()==0,"Preview cleanup leaked tickets");h.succeed();
         } finally { remove(p); }
     }
+    @GameTest(structure="minigamelib-test:empty",maxTicks=100)
+    public void dialogueOverlayRidesTheCameraAndWaitsForInput(GameTestHelper h) throws Exception {
+        var p=player(h);var service=MinigameLib.get(p.level().getServer()).cinematics();
+        try {
+            var pos=p.position();var key=new Keyframe(0,pos.x,pos.y,pos.z,0,0);
+            String dimension=h.getLevel().dimension().identifier().toString();
+            var camera=new CameraTrack(1,"talk","talk",dimension,List.of(key));
+            var lines=List.of(new DialogueLine(0,"andlist",null,null,"안녕하세요",3,true,400),new DialogueLine(6,"???",null,0x9fb4ff,"다음 줄",4,false,400));
+            var scene=new Scene(1,"talk","talk",20,List.of(new Clip("talk",0)),List.of(),List.of(new Cue(0,CueType.LETTERBOX,"",20,0)),lines);
+            var run=service.play(new ResolvedScene(scene,Map.of("talk",camera),Map.of()),List.of(p));
+            var view=CameraViews.get(p);
+            var ready=CameraViewSession.class.getDeclaredField("ready");ready.setAccessible(true);ready.setBoolean(view,true);
+            var opened=packets(p);
+            for(int i=0;i<6;i++)service.tick();
+            var output=packets(p);
+            int text=view.overlay().get("dialogue/text_0").display().getId();
+            check(h,opened.stream().anyMatch(x->x instanceof net.minecraft.network.protocol.game.ClientboundSetPassengersPacket ride&&ride.getVehicle()==view.cameraId()
+                    &&Arrays.stream(ride.getPassengers()).anyMatch(id->id==text)),"Dialogue sprites do not ride the camera entity");
+            check(h,output.stream().anyMatch(x->x instanceof net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket data&&data.id()==text
+                    &&data.packedItems().stream().anyMatch(v->v.value() instanceof Component c&&c.getString().contains("안녕하세요"))),"Typed text was not sent through the camera route");
+            var runs=(List<?>)QAControls.field(service,"runs");var state=runs.getFirst();
+            var time=state.getClass().getDeclaredField("time");time.setAccessible(true);
+            check(h,time.getInt(state)==2&&!run.done(),"Scene did not hold on the waiting line's last tick: "+time.getInt(state));
+            p.connection.handlePlayerInput(new net.minecraft.network.protocol.game.ServerboundPlayerInputPacket(new net.minecraft.world.entity.player.Input(false,false,false,false,false,true,false)));
+            service.tick();service.tick();
+            check(h,time.getInt(state)>=3,"Sneak did not release the waiting line");
+            for(int i=0;i<6;i++)service.tick();
+            check(h,packets(p).stream().anyMatch(x->x instanceof net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket data&&data.id()==text
+                    &&data.packedItems().stream().anyMatch(v->v.value() instanceof Component c&&c.getString().contains("다음 줄"))),"Second line was not shown");
+            run.stop();
+            check(h,packets(p).stream().anyMatch(x->x instanceof net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket remove&&remove.entityIds().contains(text)),"Overlay sprites were left on the client");
+            check(h,CameraViews.ticketCount()==0,"Dialogue playback leaked tickets");
+            h.succeed();
+        } finally { remove(p); }
+    }
+    @GameTest(structure="minigamelib-test:empty",maxTicks=40)
+    public void registeredSkinsDressMannequinsWithoutLookup(GameTestHelper h) {
+        var server=h.getLevel().getServer();
+        check(h,kim.biryeong.minigamelib.cinematic.Skins.registered("andlist"),"Demo skin was not registered");
+        var profile=kim.biryeong.minigamelib.cinematic.Skins.profile(server,"skin:andlist");
+        var body=profile.skinPatch().body().orElseThrow();
+        check(h,body.id().toString().equals("minigamelib:entity/skin/andlist"),"Wrong skin texture: "+body.id());
+        check(h,profile.skinPatch().model().orElseThrow()==net.minecraft.world.entity.player.PlayerModelType.SLIM,"andlist is slim");
+        check(h,kim.biryeong.minigamelib.cinematic.Skins.resolved("skin:andlist"),"Pack skins need no lookup");
+        check(h,kim.biryeong.minigamelib.cinematic.PlayerProfiles.resolved("andlist"),"Signed profile was not seeded");
+        var line=new DialogueLine(0,"<i>andlist</i>","head:@viewer",null,"<b>굵게</b> <st>취소</st>",5,false,0)
+                .withStyle(kim.biryeong.minigamelib.cinematic.dialogue.DialogueStyle.of().lineColor(0x00ff00));
+        var r=kim.biryeong.minigamelib.cinematic.dialogue.DialogueStyle.resolve(line);
+        check(h,r.lineColor()==0x00ff00&&r.nameColor()==DialogueLine.DEFAULT_COLOR,"Line style did not resolve");
+        h.succeed();
+    }
+    @GameTest(structure="minigamelib-test:empty",maxTicks=100)
+    public void builderSceneReportsLinesWaitingAdvanceAndMarkers(GameTestHelper h) throws Exception {
+        var p=player(h);var service=MinigameLib.get(p.level().getServer()).cinematics();
+        try {
+            var pos=p.position();var events=new ArrayList<String>();
+            var scene=CinematicBuilder.scene("listener").dimension(h.getLevel().dimension())
+                    .still(0,pos.x,pos.y,pos.z,0,0)
+                    .dialogue(0,d->d.say("a",null,"하나").speed(400).duration(3).waitForInput().say("b",null,"둘").speed(400).duration(3))
+                    .marker(5,"door")
+                    .build();
+            check(h,scene.scene().dialogues().size()==2&&scene.scene().dialogues().get(1).tick()==7,"Dialogue builder placed lines wrongly: "+scene.scene().dialogues());
+            var run=service.play(scene,List.of(p),new CinematicListener(){
+                @Override public void onLine(DialogueLine line){events.add("line:"+line.speaker());}
+                @Override public void onWaiting(DialogueLine line){events.add("wait:"+line.speaker());}
+                @Override public void onAdvance(net.minecraft.server.level.ServerPlayer who,DialogueLine line){events.add("advance:"+(who==p)+":"+line.speaker());}
+                @Override public void onMarker(String id,int tick){events.add("marker:"+id+"@"+tick);}
+            });
+            var ready=CameraViewSession.class.getDeclaredField("ready");ready.setAccessible(true);ready.setBoolean(CameraViews.get(p),true);
+            for(int i=0;i<6;i++)service.tick();
+            check(h,service.waiting(p)&&service.line(p).map(DialogueLine::speaker).orElse("").equals("a")&&service.time(p)==2,"Service did not report the waiting line: "+events);
+            service.advance(p);
+            for(int i=0;i<12;i++)service.tick();
+            check(h,events.equals(List.of("line:a","wait:a","advance:true:a","marker:door@5","line:b")),"Unexpected listener events: "+events);
+            check(h,run.done()&&run.completion().toCompletableFuture().join().status()==Playback.Status.COMPLETED&&!service.watching(p),"Builder scene did not complete");
+            h.succeed();
+        } finally { remove(p); }
+    }
     private static long sounds(List<net.minecraft.network.protocol.Packet<?>> packets){return packets.stream().filter(p->p instanceof net.minecraft.network.protocol.game.ClientboundSoundEntityPacket).count();}
 }
