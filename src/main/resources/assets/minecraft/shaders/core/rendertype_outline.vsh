@@ -14,13 +14,9 @@ layout(location = 1) out vec2 texCoord0;
 #include <minecraft:displayhud.glsl> // DisplayHud
 
 void main() {
-    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);
+    // DisplayHud: vertices placed far below (y < -1000) become screen-fixed HUD (branchless, see displayhud.glsl).
+    gl_Position = mix(ProjMat * ModelViewMat * vec4(Position, 1.0), displayhud_clip(Position), bvec4(displayhud_is_hud(Position)));
 
     vertexColor = Color;
     texCoord0 = UV0;
-
-    // DisplayHud: 아주 아래(y < -1000)에 놓인 꼭짓점은 화면 고정 HUD 로 옮긴다
-    if (displayhud_is_hud(Position)) {
-        gl_Position = displayhud_clip(Position);
-    }
 }

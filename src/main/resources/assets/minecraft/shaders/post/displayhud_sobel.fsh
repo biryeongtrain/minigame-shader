@@ -1,8 +1,8 @@
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
-// DisplayHud 2.2 Beta - 바닐라 entity_sobel 과 같지만, 발광 표식(0x01FEFD) 자리는 비어 있는 것으로 본다
-// (예전 발광 표식 HUD 와 트리거 둘레에 발광 테두리가 생기지 않게). 다른 색 발광은 바닐라와 똑같다.
+// DisplayHud 2.2 Beta - same as vanilla entity_sobel, but pixels with the glow marker (0x01FEFD) count as empty
+// (so no glow border appears around legacy glow-marker HUDs and the trigger). Other glow colors behave exactly like vanilla.
 
 uniform sampler2D InSampler;
 
@@ -15,8 +15,8 @@ layout(location = 0) in vec2 texCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-// 예전 방식(발광 표식): 발광색 0x01FEFD (R=1, G=254, B=253) 로 빛나는 아이템/블록 디스플레이 자리.
-// 서버 DisplayHud.ABOVE_HAND_GLOW_COLOR 와 같아야 한다. 손 위 표시 트리거 디스플레이도 이 색으로 빛난다(투명이라 찍히지는 않는다).
+// Legacy glow marker: item/block displays glowing with 0x01FEFD (R=1, G=254, B=253).
+// Must match server DisplayHud.ABOVE_HAND_GLOW_COLOR. The above-hand trigger display glows this color too (it is transparent, so it never shows).
 bool displayhud_is_glow_mask(vec4 c) {
     vec3 rgb = c.rgb * 255.0;
     return c.a > 0.5 && abs(rgb.r - 1.0) < 0.6 && abs(rgb.g - 254.0) < 0.6 && abs(rgb.b - 253.0) < 0.6;

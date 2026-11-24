@@ -40,55 +40,45 @@ layout(location = 7) flat out float frameheight;
 const vec2[4] corners = vec2[4](vec2(0), vec2(0, 1), vec2(1), vec2(1, 0));
 
 void main() {
-    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);
-
+    // Branchless (see displayhud.glsl): NVIDIA OpenGL broke world geometry when outputs were written
+    // inside if blocks. Every candidate value is computed, picked with mix(a, b, bool) or ?:, and each
+    // output is written exactly once.
+    vec4 worldPos = ProjMat * ModelViewMat * vec4(Position, 1.0);
 #if !defined(IS_GUI) && !defined(IS_SEE_THROUGH)
-    sphericalVertexDistance = fog_spherical_distance(Position);
-    cylindricalVertexDistance = fog_cylindrical_distance(Position);
-    vertexColor = Color * sample_lightmap(Sampler2, UV2);
+    vec4 litColor = Color * sample_lightmap(Sampler2, UV2);
 #else
-    vertexColor = Color;
+    vec4 litColor = Color;
 #endif
-    texCoord0 = UV0;
 
     // ShaderFX: glyph pixels with special alpha values mark full-screen / in-world effects.
-    int vert = gl_VertexIndex % 4;
-    vec2 coord = corners[vert];
+    vec2 coord = corners[gl_VertexIndex % 4];
     vec4 col = round(textureLod(Sampler0, UV0, 0.0) * 255.0);
-    effectId = 0;
-    if (col.a == 251.0) { // screenspace
-        effectId = int(col.b);
-        gl_Position.xy = vec2(coord * 2.0 - 1.0) * vec2(1.0, -1.0);
-        gl_Position.zw = vec2(-1.0, 1.0);
-        vertexColor = Color;
-        texCoord0 = vec2(UV0 - coord * 64.0 / 256.0);
-    } else if (col.a == 253.0) { // normal/in-world effect
-        effectId = int(col.b);
-        vertexColor = Color;
-    }
-
-    // animated emoji
-    frames = 0;
-    fps = 0;
-    frameheight = 0.0;
-    if (col.a == 252.0 && Position.z == 0.0) {
-        frames = int(col.r);
-        fps = int(col.g);
-        frameheight = col.b;
-    }
+    bool screenFx = col.a == 251.0;               // screenspace
+    bool worldFx = col.a == 253.0;                // normal/in-world effect
+    bool emoji = col.a == 252.0 && Position.z == 0.0; // animated emoji
+    vec4 screenPos = vec4((coord * 2.0 - 1.0) * vec2(1.0, -1.0), -1.0, 1.0);
 
     // DisplayHud: vertices placed far below (y < -1000) become screen-fixed HUD
 #ifndef IS_GUI
-    if (displayhud_is_hud(Position)) {
-        gl_Position = displayhud_clip(Position);
+    bool hud = displayhud_is_hud(Position);
+    vec4 hudPos = displayhud_clip(Position);
 #if !defined(IS_SEE_THROUGH) && !defined(OIT)
-        gl_Position.z = displayhud_above_hand_depth(gl_Position.z, UV2);
+    hudPos.z = displayhud_above_hand_depth(hudPos.z, UV2); // above-hand marker (light block 1 / sky 2)
 #endif
-        vertexColor = Color;
-#ifndef IS_SEE_THROUGH
-        sphericalVertexDistance = 0.0;
-        cylindricalVertexDistance = 0.0;
+#else
+    bool hud = false;
+    vec4 hudPos = worldPos;
 #endif
-    }
+
+    gl_Position = mix(mix(worldPos, screenPos, bvec4(screenFx)), hudPos, bvec4(hud));
+    vertexColor = mix(litColor, Color, bvec4(screenFx || worldFx || hud));
+    texCoord0 = mix(UV0, UV0 - coord * 64.0 / 256.0, bvec2(screenFx));
+#if !defined(IS_GUI) && !defined(IS_SEE_THROUGH)
+    sphericalVertexDistance = mix(fog_spherical_distance(Position), 0.0, hud);
+    cylindricalVertexDistance = mix(fog_cylindrical_distance(Position), 0.0, hud);
 #endif
+    effectId = (screenFx || worldFx) ? int(col.b) : 0;
+    frames = emoji ? int(col.r) : 0;
+    fps = emoji ? int(col.g) : 0;
+    frameheight = emoji ? col.b : 0.0;
 }
