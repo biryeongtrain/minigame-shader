@@ -38,15 +38,22 @@ layout(location = 6) out vec2 texCoordGlint;
 #include <minecraft:displayhud.glsl> // DisplayHud
 
 void main() {
-    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);
+    // DisplayHud: vertices placed far below (y < -1000) become screen-fixed HUD.
+    // Branchless (see displayhud.glsl): every output is written exactly once.
+    bool hud = displayhud_is_hud(Position);
+    vec4 hudPos = displayhud_clip(Position);
+#if !defined(OIT)
+    hudPos.z = displayhud_above_hand_depth(hudPos.z, UV2); // above-hand marker (light block 1 / sky 2)
+#endif
+    gl_Position = mix(ProjMat * ModelViewMat * vec4(Position, 1.0), hudPos, bvec4(hud));
 
     #ifndef OIT_ALPHA_ONLY
-    sphericalVertexDistance = fog_spherical_distance(Position);
-    cylindricalVertexDistance = fog_cylindrical_distance(Position);
+    sphericalVertexDistance = mix(fog_spherical_distance(Position), 0.0, hud);
+    cylindricalVertexDistance = mix(fog_cylindrical_distance(Position), 0.0, hud);
     #endif
-    vertexColor = minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color);
+    vertexColor = mix(minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color), Color, bvec4(hud));
     #ifndef OIT_ALPHA_ONLY
-    lightMapColor = sample_lightmap(Sampler2, UV2);
+    lightMapColor = mix(sample_lightmap(Sampler2, UV2), vec4(1.0), bvec4(hud));
     overlayColor = texelFetch(Sampler1, UV1, 0);
     #endif
 
@@ -59,18 +66,4 @@ void main() {
     #endif
     #endif
 
-    // DisplayHud: 아주 아래(y < -1000)에 놓인 꼭짓점은 화면 고정 HUD 로 옮긴다
-    if (displayhud_is_hud(Position)) {
-        gl_Position = displayhud_clip(Position);
-#if !defined(OIT)
-        // DisplayHud 2.2: 손 위 표시 표식(밝기 block 1 / sky 2)이면 손보다 위로 올릴 전용 깊이 구간에 그린다
-        gl_Position.z = displayhud_above_hand_depth(gl_Position.z, UV2);
-#endif
-        vertexColor = Color;
-#ifndef OIT_ALPHA_ONLY
-        lightMapColor = vec4(1.0);
-        sphericalVertexDistance = 0.0;
-        cylindricalVertexDistance = 0.0;
-#endif
-    }
 }

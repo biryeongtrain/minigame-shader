@@ -50,56 +50,43 @@ layout(location = 7) out vec2 texCoordGlint;
 #include <minecraft:displayhud.glsl> // DisplayHud
 
 void main() {
-    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);
+    // DisplayHud: vertices placed far below (y < -1000) become screen-fixed HUD.
+    // Branchless (see displayhud.glsl): every output is written exactly once.
+    bool hud = displayhud_is_hud(Position);
+    vec4 hudPos = displayhud_clip(Position);
+#if !defined(EMISSIVE) && !defined(OIT)
+    hudPos.z = displayhud_above_hand_depth(hudPos.z, UV2); // above-hand marker (light block 1 / sky 2)
+#endif
+    gl_Position = mix(ProjMat * ModelViewMat * vec4(Position, 1.0), hudPos, bvec4(hud));
 
-    sphericalVertexDistance = fog_spherical_distance(Position);
-    cylindricalVertexDistance = fog_cylindrical_distance(Position);
+    sphericalVertexDistance = mix(fog_spherical_distance(Position), 0.0, hud);
+    cylindricalVertexDistance = mix(fog_cylindrical_distance(Position), 0.0, hud);
 
 #ifdef PER_FACE_LIGHTING
     vec2 light = minecraft_compute_light(Light0_Direction, Light1_Direction, Normal);
-    vertexPerFaceColorBack = minecraft_mix_light_separate(-light, Color);
-    vertexPerFaceColorFront = minecraft_mix_light_separate(light, Color);
+    vertexPerFaceColorBack = mix(minecraft_mix_light_separate(-light, Color), Color, bvec4(hud));
+    vertexPerFaceColorFront = mix(minecraft_mix_light_separate(light, Color), Color, bvec4(hud));
 #elif defined(NO_CARDINAL_LIGHTING)
     vertexColor = Color;
 #else
-    vertexColor = minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color);
+    vertexColor = mix(minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color), Color, bvec4(hud));
 #endif
 
 #if !defined(EMISSIVE) && !defined(OIT_ALPHA_ONLY)
-    lightMapColor = sample_lightmap(Sampler2, UV2);
+    lightMapColor = mix(sample_lightmap(Sampler2, UV2), vec4(1.0), bvec4(hud));
 #endif
 
 #if !defined(NO_OVERLAY) && !defined(OIT_ALPHA_ONLY)
     overlayColor = texelFetch(Sampler1, UV1, 0);
 #endif
 
-    texCoord0 = UV0;
-
 #ifdef APPLY_TEXTURE_MATRIX
     texCoord0 = (TextureMat * vec4(UV0, 0.0, 1.0)).xy;
+#else
+    texCoord0 = UV0;
 #endif
 
 #ifdef GLINT
     texCoordGlint = (TextureMat * vec4(UV0, 0.0, 1.0)).xy;
 #endif
-
-    // DisplayHud: 아주 아래(y < -1000)에 놓인 꼭짓점은 화면 고정 HUD 로 옮긴다
-    if (displayhud_is_hud(Position)) {
-        gl_Position = displayhud_clip(Position);
-#if !defined(EMISSIVE) && !defined(OIT)
-        // DisplayHud 2.2: 손 위 표시 표식(밝기 block 1 / sky 2)이면 손보다 위로 올릴 전용 깊이 구간에 그린다
-        gl_Position.z = displayhud_above_hand_depth(gl_Position.z, UV2);
-#endif
-#ifdef PER_FACE_LIGHTING
-        vertexPerFaceColorBack = Color;
-        vertexPerFaceColorFront = Color;
-#else
-        vertexColor = Color;
-#endif
-#ifndef EMISSIVE
-        lightMapColor = vec4(1.0);
-#endif
-        sphericalVertexDistance = 0.0;
-        cylindricalVertexDistance = 0.0;
-    }
 }
