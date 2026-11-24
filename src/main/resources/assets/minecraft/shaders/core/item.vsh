@@ -41,7 +41,7 @@ void main() {
     // DisplayHud: vertices placed far below (y < -1000) become screen-fixed HUD.
     // Branchless (see displayhud.glsl): every output is written exactly once.
     bool hud = displayhud_is_hud(Position);
-    vec4 hudPos = displayhud_clip(Position);
+    vec4 hudPos = displayhud_clip(displayhud_hud_position(Position, Color, mat3(ModelViewMat), UV2));
 #if !defined(OIT)
     hudPos.z = displayhud_above_hand_depth(hudPos.z, UV2); // above-hand marker (light block 1 / sky 2)
 #endif
@@ -51,7 +51,7 @@ void main() {
     sphericalVertexDistance = mix(fog_spherical_distance(Position), 0.0, hud);
     cylindricalVertexDistance = mix(fog_cylindrical_distance(Position), 0.0, hud);
     #endif
-    vertexColor = mix(minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color), Color, bvec4(hud));
+    vertexColor = mix(minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color), displayhud_hud_color(Color, UV2), bvec4(hud));
     #ifndef OIT_ALPHA_ONLY
     lightMapColor = mix(sample_lightmap(Sampler2, UV2), vec4(1.0), bvec4(hud));
     overlayColor = texelFetch(Sampler1, UV1, 0);

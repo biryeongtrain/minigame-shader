@@ -53,7 +53,7 @@ void main() {
     // DisplayHud: vertices placed far below (y < -1000) become screen-fixed HUD.
     // Branchless (see displayhud.glsl): every output is written exactly once.
     bool hud = displayhud_is_hud(Position);
-    vec4 hudPos = displayhud_clip(Position);
+    vec4 hudPos = displayhud_clip(displayhud_hud_position(Position, Color, mat3(ModelViewMat), UV2));
 #if !defined(EMISSIVE) && !defined(OIT)
     hudPos.z = displayhud_above_hand_depth(hudPos.z, UV2); // above-hand marker (light block 1 / sky 2)
 #endif
@@ -64,12 +64,12 @@ void main() {
 
 #ifdef PER_FACE_LIGHTING
     vec2 light = minecraft_compute_light(Light0_Direction, Light1_Direction, Normal);
-    vertexPerFaceColorBack = mix(minecraft_mix_light_separate(-light, Color), Color, bvec4(hud));
-    vertexPerFaceColorFront = mix(minecraft_mix_light_separate(light, Color), Color, bvec4(hud));
+    vertexPerFaceColorBack = mix(minecraft_mix_light_separate(-light, Color), displayhud_hud_color(Color, UV2), bvec4(hud));
+    vertexPerFaceColorFront = mix(minecraft_mix_light_separate(light, Color), displayhud_hud_color(Color, UV2), bvec4(hud));
 #elif defined(NO_CARDINAL_LIGHTING)
     vertexColor = Color;
 #else
-    vertexColor = mix(minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color), Color, bvec4(hud));
+    vertexColor = mix(minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color), displayhud_hud_color(Color, UV2), bvec4(hud));
 #endif
 
 #if !defined(EMISSIVE) && !defined(OIT_ALPHA_ONLY)

@@ -52,8 +52,42 @@ vec4 displayhud_clip(vec3 position) {
 // so location.z -900 .. 900 keeps its order inside the band.
 #define DISPLAYHUD_ABOVE_HAND_LIGHT ivec2(16, 32)
 
+// Pointer (DisplayHud.setPointer, minigame-lib addition)
+// An above-hand HUD with light block 2 / sky 2. Its tint RGB carries the yaw (12 bit) and pitch (12 bit)
+// at the time the server computed its position. Every frame it moves by the difference to the real view
+// rotation (ModelViewMat) * 15px per degree, so it follows the mouse between server updates.
+#define DISPLAYHUD_POINTER_LIGHT ivec2(32, 32)
+#define DISPLAYHUD_POINTER_PX 15.0
+
+bool displayhud_is_pointer(ivec2 light) {
+    return all(equal(light, DISPLAYHUD_POINTER_LIGHT));
+}
+
+vec3 displayhud_pointer(vec3 position, vec4 color, mat3 view) {
+    ivec3 c = ivec3(round(color.rgb * 255.0));
+    float refYaw = float((c.r << 4) | (c.g >> 4)) / 4096.0 * 360.0;
+    float refPitch = float(((c.g & 15) << 8) | c.b) / 4095.0 * 180.0 - 90.0;
+    vec3 f = -vec3(view[0][2], view[1][2], view[2][2]); // view direction in world space
+    float yaw = degrees(atan(-f.x, f.z));
+    float pitch = degrees(asin(clamp(-f.y, -1.0, 1.0)));
+    float dYaw = mod(yaw - refYaw + 540.0, 360.0) - 180.0;
+    vec2 d = clamp(vec2(dYaw, pitch - refPitch) * DISPLAYHUD_POINTER_PX, vec2(-240.0), vec2(240.0));
+    return position - vec3(d.x * DISPLAYHUD_X, d.y * DISPLAYHUD_Y, 0.0);
+}
+
+// HUD vertex position: pointer vertices follow the live view rotation, others stay put.
+vec3 displayhud_hud_position(vec3 position, vec4 color, mat3 view, ivec2 light) {
+    return mix(position, displayhud_pointer(position, color, view), bvec3(displayhud_is_pointer(light)));
+}
+
+// HUD vertex color: the pointer's tint carries the rotation, so it is drawn white.
+vec4 displayhud_hud_color(vec4 color, ivec2 light) {
+    return mix(color, vec4(1.0, 1.0, 1.0, color.a), bvec4(displayhud_is_pointer(light)));
+}
+
 float displayhud_above_hand_depth(float z, ivec2 light) {
-    return mix(z, 0.945 + clamp(z - 0.5, -0.045, 0.045), all(equal(light, DISPLAYHUD_ABOVE_HAND_LIGHT)));
+    bool above = all(equal(light, DISPLAYHUD_ABOVE_HAND_LIGHT)) || displayhud_is_pointer(light);
+    return mix(z, 0.945 + clamp(z - 0.5, -0.045, 0.045), above);
 }
 
 #endif

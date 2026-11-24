@@ -45,7 +45,14 @@ https://github.com/biryeongtrain/RGBMapUtils
 
 ## 설치와 이전
 
-Fabric Loader 0.20.1+, Fabric API 0.164.0+26.3, Polymer 0.18.4+26.3을 서버에 설치하고 `minigame-lib-2.0.0+26.3.jar`를 추가합니다. Maven 좌표는 `kim.biryeong:minigame-lib:2.0.0+26.3`입니다. 클라이언트는 바닐라 26.3(OpenGL/Vulkan)이며 Polymer 리소스팩만 받으면 됩니다. 이 작업에서는 Maven 저장소에 게시하지 않습니다.
+Fabric Loader 0.20.1+, Fabric API 0.164.0+26.3, Polymer 0.18.4+26.3을 서버에 설치하고 `minigame-lib-2.3.1+26.3.jar`를 추가합니다. Maven 좌표는 `kim.biryeong:minigame-lib:2.3.1+26.3`입니다.
+
+```groovy
+repositories { maven { url "https://repo.biryeong.kim/releases/" } }
+dependencies { implementation include("kim.biryeong:minigame-lib:2.3.1+26.3") }
+```
+
+새 버전은 `gradle.properties`의 `mod_version`을 올린 뒤 `./gradlew publishToR2`로 게시합니다(빌드·테스트, R2 업로드, 공개 URL 확인까지 수행하며 rclone `r2` remote 설정이 필요합니다. 이미 게시된 버전은 덮어쓰지 않습니다). 클라이언트는 바닐라 26.3(OpenGL/Vulkan)이며 Polymer 리소스팩만 받으면 됩니다.
 
 기존 Java import의 `kim.biryeong.dantashader`를 `kim.biryeong.minigamelib`로, 리소스 ID의 `dantashader:`를 `minigamelib:`로 변경하세요. 모드 ID는 `minigamelib`입니다. 기존 `shaderfx.json`은 새 `config/minigame-lib/shaderfx.json`이 없을 때 가져옵니다. 원본은 남겨 둡니다.
 
@@ -472,3 +479,14 @@ JUnit은 파싱·보간·파일 충돌·음악 길이·재생 순서·팩 적용
 1.x에 있던 Copper Golem 스모크 하네스(`runSmokeServer`)는 26.3 하네스가 없어 제거했습니다. 대신 `runClientGameTest`로 실제 클라이언트 화면을 확인합니다.
 
 실행 결과와 실제 화면·영상, 생략한 검증은 [검증 기록](docs/verification.md)에 정리했습니다.
+
+### 이미 팩에 포함된 음악 재생
+
+```java
+Playback music = MinigameLib.get(server).music().playSound(
+    Identifier.fromNamespaceAndPath("mygame", "tower_music"),
+    144.23, 0.5f, List.of(player), true);
+music.stop(); // 또는 자동 길이 종료, music.done() / completion() 확인
+```
+
+`playSound`는 기존 `sounds.json` 이벤트를 사용하며 파일을 재복사하지 않습니다. 호출자는 실제 OGG 길이와 `stream: true`, Polymer 주팩 포함을 책임집니다. MUSIC 채널·팩준비·카메라앵커·리스너 소유권·타이머·정지는 기존 MusicService와 같습니다. 마지막 인수 `scene=true`는 시네마틱 우선권으로 재생합니다. 팩 미준비 리스너는 기존 catalog API와 같이 건너뛰므로 팩이 준비된 후 호출하세요.
